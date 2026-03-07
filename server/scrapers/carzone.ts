@@ -14,33 +14,43 @@ export async function scrapeCarzoneComparables(vehicle: Vehicle, options: Search
     await dismissConsent(page);
     await page.waitForSelector('.stock-summary', { timeout: 30000 });
 
-    const rawListings = await page.evaluate((sourceUrl) => {
-      const text = (node: Element | null) => (node?.textContent ?? '').replace(/\s+/g, ' ').trim();
+    // Use string-based evaluation to avoid tsx transpilation issues
+    const rawListings = (await page.evaluate(`
+      (function(sourceUrl) {
+        function text(node) {
+          var content = node && node.textContent ? node.textContent : '';
+          return content.replace(/\\s+/g, ' ').trim();
+        }
 
-      return Array.from(document.querySelectorAll('.stock-summary')).map((card) => {
-        const href =
-          (card.querySelector('a[href*="/fpa/"]') as HTMLAnchorElement | null)?.getAttribute('href') ?? '';
-        const title = text(card.querySelector('h2'));
-        const description = text(card.querySelector('.stock-summary__description'));
-        const details = text(card.querySelector('.stock-summary__features__details strong'));
-        const dealerLocation = text(card.querySelector('.stock-summary__features__dealer'));
-        const priceText =
-          text(card.querySelector('aside .stock-summary__price .cz-price span span')) ||
-          text(card.querySelector('.stock-summary__price .cz-price span span'));
-        const imageStyle = (card.querySelector('.stock-summary__image') as HTMLElement | null)?.style.backgroundImage ?? '';
+        return Array.from(document.querySelectorAll('.stock-summary')).map(function(card) {
+          var linkElem = card.querySelector('a[href*="/fpa/"]');
+          var href = linkElem && linkElem.getAttribute ? linkElem.getAttribute('href') || '' : '';
 
-        return {
-          href,
-          title,
-          description,
-          details,
-          dealerLocation,
-          priceText,
-          imageStyle,
-          sourceUrl,
-        };
-      });
-    }, searchUrl);
+          var title = text(card.querySelector('h2'));
+          var description = text(card.querySelector('.stock-summary__description'));
+          var details = text(card.querySelector('.stock-summary__features__details strong'));
+          var dealerLocation = text(card.querySelector('.stock-summary__features__dealer'));
+
+          var priceText =
+            text(card.querySelector('aside .stock-summary__price .cz-price span span')) ||
+            text(card.querySelector('.stock-summary__price .cz-price span span'));
+
+          var imgElem = card.querySelector('.stock-summary__image');
+          var imageStyle = imgElem && imgElem.style && imgElem.style.backgroundImage ? imgElem.style.backgroundImage : '';
+
+          return {
+            href: href,
+            title: title,
+            description: description,
+            details: details,
+            dealerLocation: dealerLocation,
+            priceText: priceText,
+            imageStyle: imageStyle,
+            sourceUrl: sourceUrl
+          };
+        });
+      })("${searchUrl.replace(/"/g, '\\"')}")
+    `)) as any[];
 
     const scrapedAt = new Date().toISOString();
 

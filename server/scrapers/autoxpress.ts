@@ -15,33 +15,45 @@ export async function scrapeAutoXpressInventory(options: AutoXpressScrapeOptions
     await page.waitForSelector('.car-tile', { timeout: 30000 });
 
     for (let pageIndex = 0; pageIndex < options.maxPages; pageIndex += 1) {
-      const vehicles = await page.evaluate((scrapedAt) => {
-        const text = (selector: ParentNode | null, query: string) =>
-          (selector?.querySelector(query)?.textContent ?? '').replace(/\s+/g, ' ').trim();
+      const scrapedAt = new Date().toISOString();
 
-        return Array.from(document.querySelectorAll('.car-tile')).map((card) => {
-          const href =
-            (card.querySelector('a[href*="/vehicle?id="]') as HTMLAnchorElement | null)?.getAttribute('href') ?? '';
-          const specs = Array.from(card.querySelectorAll('.car-desc__new td')).map((cell) =>
-            (cell.textContent ?? '').replace(/\s+/g, ' ').trim(),
-          );
-          const title = text(card, '.car-title h2');
-          const subtitle = text(card, '.car-title p');
-          const imageUrl = (card.querySelector('.car-image img') as HTMLImageElement | null)?.src ?? '';
+      // Use string-based evaluation to avoid tsx transpilation issues
+      const vehicles = (await page.evaluate(`
+        (function(scrapedAt) {
+          function text(selector, query) {
+            var elem = selector && selector.querySelector ? selector.querySelector(query) : null;
+            var content = elem && elem.textContent ? elem.textContent : '';
+            return content.replace(/\\s+/g, ' ').trim();
+          }
 
-          return {
-            href,
-            title,
-            subtitle,
-            priceText: text(card, '.car-full-price .price-wrapper'),
-            monthlyText: text(card, '.car-monthly-price .price-wrapper'),
-            location: text(card, '.location-wrapper p'),
-            imageUrl,
-            specs,
-            scrapedAt,
-          };
-        });
-      }, new Date().toISOString());
+          return Array.from(document.querySelectorAll('.car-tile')).map(function(card) {
+            var linkElem = card.querySelector('a[href*="/vehicle?id="]');
+            var href = linkElem && linkElem.getAttribute ? linkElem.getAttribute('href') || '' : '';
+
+            var specs = Array.from(card.querySelectorAll('.car-desc__new td')).map(function(cell) {
+              return cell.textContent ? cell.textContent.replace(/\\s+/g, ' ').trim() : '';
+            });
+
+            var title = text(card, '.car-title h2');
+            var subtitle = text(card, '.car-title p');
+
+            var imgElem = card.querySelector('.car-image img');
+            var imageUrl = imgElem && imgElem.src ? imgElem.src : '';
+
+            return {
+              href: href,
+              title: title,
+              subtitle: subtitle,
+              priceText: text(card, '.car-full-price .price-wrapper'),
+              monthlyText: text(card, '.car-monthly-price .price-wrapper'),
+              location: text(card, '.location-wrapper p'),
+              imageUrl: imageUrl,
+              specs: specs,
+              scrapedAt: scrapedAt
+            };
+          });
+        })("${scrapedAt}")
+      `)) as any[];
 
       for (const item of vehicles) {
         const idMatch = item.href.match(/id=([^&]+)/);

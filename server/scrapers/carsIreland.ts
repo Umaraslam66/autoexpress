@@ -19,39 +19,49 @@ export async function scrapeCarsIrelandComparables(
       timeout: 30000,
     });
 
-    const rawListings = await page.evaluate((sourceUrl) => {
-      const text = (node: Element | null) => (node?.textContent ?? '').replace(/\s+/g, ' ').trim();
+    // Use string-based evaluation to avoid tsx transpilation issues
+    const rawListings = (await page.evaluate(`
+      (function(sourceUrl) {
+        function text(node) {
+          var content = node && node.textContent ? node.textContent : '';
+          return content.replace(/\\s+/g, ' ').trim();
+        }
 
-      return Array.from(document.querySelectorAll('a[href*="journey=Search"], a[href*="journey=FeaturedListing"]')).map(
-        (anchor) => {
-          const title = text(anchor.querySelector('h3'));
-          const paragraphs = Array.from(anchor.querySelectorAll('p')).map((node) => text(node)).filter(Boolean);
-          const year = text(anchor.querySelector('.cids-o-listing-card__details__vehicle-info__vehicle-year h3'));
-          const reg = text(anchor.querySelector('.cids-o-listing-card__details__vehicle-info__vehicle-reg-detail'));
-          const mileage = text(anchor.querySelector('.cids-o-listing-card__details__vehicle-info__vehicle-mileage'));
-          const location = text(anchor.querySelector('.cids-o-listing-card__details__location-and-save-container__location'));
-          const priceText = text(anchor.querySelector('.cids-o-listing-card__details__pricing > span'));
-          const color = text(anchor.querySelector('.cids-o-listing-card__details__vehicle-color__color-text'));
-          const imageStyle =
-            (anchor.querySelector('.cids-o-listing-card__images__main__image') as HTMLElement | null)?.style.backgroundImage ??
-            '';
+        return Array.from(document.querySelectorAll('a[href*="journey=Search"], a[href*="journey=FeaturedListing"]')).map(
+          function(anchor) {
+            var title = text(anchor.querySelector('h3'));
 
-          return {
-            href: (anchor as HTMLAnchorElement).getAttribute('href') ?? '',
-            title,
-            paragraphs,
-            year,
-            reg,
-            mileage,
-            location,
-            priceText,
-            color,
-            imageStyle,
-            sourceUrl,
-          };
-        },
-      );
-    }, searchUrl);
+            var paragraphs = Array.from(anchor.querySelectorAll('p')).map(function(node) {
+              return text(node);
+            }).filter(Boolean);
+
+            var year = text(anchor.querySelector('.cids-o-listing-card__details__vehicle-info__vehicle-year h3'));
+            var reg = text(anchor.querySelector('.cids-o-listing-card__details__vehicle-info__vehicle-reg-detail'));
+            var mileage = text(anchor.querySelector('.cids-o-listing-card__details__vehicle-info__vehicle-mileage'));
+            var location = text(anchor.querySelector('.cids-o-listing-card__details__location-and-save-container__location'));
+            var priceText = text(anchor.querySelector('.cids-o-listing-card__details__pricing > span'));
+            var color = text(anchor.querySelector('.cids-o-listing-card__details__vehicle-color__color-text'));
+
+            var imgElem = anchor.querySelector('.cids-o-listing-card__images__main__image');
+            var imageStyle = imgElem && imgElem.style && imgElem.style.backgroundImage ? imgElem.style.backgroundImage : '';
+
+            return {
+              href: anchor.getAttribute ? anchor.getAttribute('href') || '' : '',
+              title: title,
+              paragraphs: paragraphs,
+              year: year,
+              reg: reg,
+              mileage: mileage,
+              location: location,
+              priceText: priceText,
+              color: color,
+              imageStyle: imageStyle,
+              sourceUrl: sourceUrl
+            };
+          }
+        );
+      })("${searchUrl.replace(/"/g, '\\"')}")
+    `)) as any[];
 
     const scrapedAt = new Date().toISOString();
 
