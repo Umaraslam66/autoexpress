@@ -1,0 +1,382 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  PRICING_MANAGER
+}
+
+enum SourceName {
+  AUTOXPRESS
+  CARZONE
+  CARSIRELAND
+}
+
+enum InventorySourceMode {
+  FEED
+  SCRAPE
+  CSV
+}
+
+enum VehicleStatus {
+  ACTIVE
+  SOLD
+  INCOMING
+}
+
+enum MatchConfidence {
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum PriceDecisionType {
+  ACCEPTED
+  MANUAL
+}
+
+enum SourceHealthStatus {
+  HEALTHY
+  DEGRADED
+  OFFLINE
+}
+
+enum JobStatus {
+  SUCCESS
+  WARNING
+  FAILED
+}
+
+enum ListingKind {
+  INVENTORY
+  COMPARABLE
+}
+
+model Dealership {
+  id                 String              @id @default(cuid())
+  name               String
+  slug               String              @unique
+  createdAt          DateTime            @default(now()) @map("created_at")
+  updatedAt          DateTime            @updatedAt @map("updated_at")
+  users              User[]
+  inventorySources   InventorySource[]
+  vehicles           Vehicle[]
+  rawListings        RawListing[]
+  normalizedListings NormalizedListing[]
+  sourceRuns         SourceRun[]
+  vehicleMatches     VehicleMatch[]
+  recommendations    PricingRecommendation[]
+  decisions          PricingDecision[]
+  excludedComparables ExcludedComparable[]
+  pricingFiles       PricingFile[]
+  normalizationRules NormalizationRule[]
+
+  @@map("dealerships")
+}
+
+model User {
+  id           String        @id @default(cuid())
+  dealershipId String        @map("dealership_id")
+  name         String
+  email        String        @unique
+  role         UserRole
+  passwordHash String        @map("password_hash")
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+  dealership   Dealership    @relation(fields: [dealershipId], references: [id], onDelete: Cascade)
+  sessions     SessionRecord[]
+  decisions    PricingDecision[]
+  pricingFiles PricingFile[]
+
+  @@map("users")
+}
+
+model SessionRecord {
+  id             String   @id @default(cuid())
+  sid            String   @unique
+  userId         String   @map("user_id")
+  expiresAt      DateTime @map("expires_at")
+  createdAt      DateTime @default(now()) @map("created_at")
+  lastAccessedAt DateTime @default(now()) @map("last_accessed_at")
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model InventorySource {
+  id            String              @id @default(cuid())
+  dealershipId  String              @map("dealership_id")
+  source        SourceName
+  mode          InventorySourceMode
+  enabled       Boolean             @default(true)
+  priority      Int                 @default(0)
+  feedUrl       String?             @map("feed_url")
+  configJson    Json?               @map("config_json")
+  lastRunAt     DateTime?           @map("last_run_at")
+  lastSuccessAt DateTime?           @map("last_success_at")
+  createdAt     DateTime            @default(now()) @map("created_at")
+  updatedAt     DateTime            @updatedAt @map("updated_at")
+  dealership    Dealership          @relation(fields: [dealershipId], references: [id], onDelete: Cascade)
+  sourceRuns    SourceRun[]
+
+  @@unique([dealershipId, source, mode])
+  @@map("inventory_sources")
+}
+
+model SourceRun {
+  id               String              @id @default(cuid())
+  dealershipId     String              @map("dealership_id")
+  inventorySourceId String?            @map("inventory_source_id")
+  source           SourceName
+  mode             InventorySourceMode
+  status           JobStatus
+  startedAt        DateTime            @default(now()) @map("started_at")
+  completedAt      DateTime?           @map("completed_at")
+  recordsProcessed Int                 @default(0) @map("records_processed")
+  message          String
+  metadataJson     Json?               @map("metadata_json")
+  dealership       Dealership          @relation(fields: [dealershipId], references: [id], onDelete: Cascade)
+  inventorySource  InventorySource?    @relation(fields: [inventorySourceId], references: [id], onDelete: SetNull)
+  rawListings      RawListing[]
+
+  @@map("source_runs")
+}
+
+model Vehicle {
+  id             String                  @id @default(cuid())
+  dealershipId   String                  @map("dealership_id")
+  source         SourceName              @default(AUTOXPRESS)
+  externalId     String                  @map("external_id")
+  stockId        String                  @map("stock_id")
+  registration   String
+  vinFragment    String?                 @map("vin_fragment")
+  make           String
+  model          String
+  variant        String
+  year           Int
+  mileageKm      Int                     @map("mileage_km")
+  fuel           String
+  transmission   String
+  bodyType       String                  @map("body_type")
+  engineLitres   Float                   @map("engine_litres")
+  colour         String
+  price          Int
+  status         VehicleStatus
+  dateAdded      DateTime                @map("date_added")
+  location       String
+  vehicleUrl     String                  @map("vehicle_url")
+  imageUrl       String                  @map("image_url")
+  notesJson      Json?                   @map("notes_json")
+  sourceRunId    String?                 @map("source_run_id")
+  lastSeenAt     DateTime                @default(now()) @map("last_seen_at")
+  createdAt      DateTime                @default(now()) @map("created_at")
+  updatedAt      DateTime                @updatedAt @map("updated_at")
+  dealership     Dealership              @relation(fields: [dealershipId], references: [id], onDelete: Cascade)
+  snapshots      VehicleSnapshot[]
+  matches        VehicleMatch[]
+  recommendations PricingRecommendation[]
+  decisions      PricingDecision[]
+  excludedComparables ExcludedComparable[]
+  pricingFiles   PricingFile[]
+
+  @@unique([dealershipId, source, externalId])
+  @@map("vehicles")
+}
+
+model VehicleSnapshot {
+  id           String   @id @default(cuid())
+  vehicleId    String   @map("vehicle_id")
+  sourceRunId  String?  @map("source_run_id")
+  price        Int
+  mileageKm    Int      @map("mileage_km")
+  status       VehicleStatus
+  capturedAt   DateTime @default(now()) @map("captured_at")
+  snapshotJson Json     @map("snapshot_json")
+  vehicle      Vehicle   @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  @@map("vehicle_snapshots")
+}
+
+model RawListing {
+  id               String      @id @default(cuid())
+  dealershipId     String      @map("dealership_id")
+  sourceRunId      String      @map("source_run_id")
+  source           SourceName
+  kind             ListingKind
+  externalId       String?     @map("external_id")
+  listingUrl       String?     @map("listing_url")
+  payloadJson      Json        @map("payload_json")
+  htmlSnapshot     String?     @db.Text @map("html_snapshot")
+  capturedAt       DateTime    @default(now()) @map("captured_at")
+  dealership       Dealership  @relation(fields: [dealershipId], references: [id], onDelete: Cascade)
+  sourceRun        SourceRun   @relation(fields: [sourceRunId], references: [id], onDelete: Cascade)
+  normalizedListings NormalizedListing[]
+
+  @@map("raw_listings")
+}
+
+model NormalizedListing {
+  id             String            @id @default(cuid())
+  dealershipId   String            @map("dealership_id")
+  rawListingId   String?           @map("raw_listing_id")
+  source         SourceName
+  externalId     String            @map("external_id")
+  listingUrl     String            @map("listing_url")
+  title          String
+  make           String
+  model          String
+  variant        String
+  year           Int
+  mileageKm      Int               @map("mileage_km")
+  fuel           String
+  transmission   String
+  bodyType       String            @map("body_type")
+  engineLitres   Float?
+  price          Int
+  dealerName     String            @map("dealer_name")
+  dealerLocation String            @map("dealer_location")
+  listedAt       DateTime?         @map("listed_at")
+  daysListed     Int               @default(0) @map("days_listed")
+  imageUrl       String?           @map("image_url")
+  lastSeenAt     DateTime          @default(now()) @map("last_seen_at")
+  isActive       Boolean           @default(true) @map("is_active")
+  normalizationStatus String       @default("normalized") @map("normalization_status")
+  rawValuesJson  Json?             @map("raw_values_json")
+  createdAt      DateTime          @default(now()) @map("created_at")
+  updatedAt      DateTime          @updatedAt @map("updated_at")
+  dealership     Dealership        @relation(fields: [dealershipId], references: [id], onDelete: Cascade)
+  rawListing     RawListing?       @relation(fields: [rawListingId], references: [id], onDelete: SetNull)
+  matches        VehicleMatch[]
+
+  @@unique([dealershipId, source, externalId])
+  @@map("normalized_listings")
+}
+
+model VehicleMatch {
+  id                 String          @id @default(cuid())
+  dealershipId       String          @map("dealership_id")
+  vehicleId          String          @map("vehicle_id")
+  normalizedListingId String         @map("normalized_listing_id")
+  score              Int
+  confidence         MatchConfidence
+  explanationJson    Json            @map("explanation_json")
+  included           Boolean         @default(true)
+  manuallyExcluded   Boolean         @default(false) @map("manually_excluded")
+  lastEvaluatedAt    DateTime        @default(now()) @map("last_evaluated_at")
+  createdAt          DateTime        @default(now()) @map("created_at")
+  updatedAt          DateTime        @updatedAt @map("updated_at")
+  dealership         Dealership      @relation(fields: [dealershipId], references: [id], onDelete: Cascade)
+  vehicle            Vehicle         @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  normalizedListing  NormalizedListing @relation(fields: [normalizedListingId], references: [id], onDelete: Cascade)
+
+  @@unique([vehicleId, normalizedListingId])
+  @@map("vehicle_matches")
+}
+
+model PricingRecommendation {
+  id                 String     @id @default(cuid())
+  dealershipId       String     @map("dealership_id")
+  vehicleId          String     @map("vehicle_id")
+  comparableCount    Int        @map("comparable_count")
+  marketMin          Int?
+  marketMax          Int?
+  marketMedian       Int?       @map("market_median")
+  marketAverage      Int?       @map("market_average")
+  similarMileageMedian Int?     @map("similar_mileage_median")
+  similarYearMedian  Int?       @map("similar_year_median")
+  suggestedFloor     Int?       @map("suggested_floor")
+  suggestedTarget    Int?       @map("suggested_target")
+  suggestedCeiling   Int?       @map("suggested_ceiling")
+  currentPosition    String?    @map("current_position")
+  deltaToTargetPct   Float?     @map("delta_to_target_pct")
+  reasoningJson      Json       @map("reasoning_json")
+  createdAt          DateTime   @default(now()) @map("created_at")
+  vehicle            Vehicle    @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  dealership         Dealership @relation(fields: [dealershipId], references: [id], onDelete: Cascade)
+
+  @@index([vehicleId, createdAt])
+  @@map("pricing_recommendations")
+}
+
+model PricingDecision {
+  id          String            @id @default(cuid())
+  dealershipId String           @map("dealership_id")
+  vehicleId   String            @map("vehicle_id")
+  userId      String            @map("user_id")
+  targetPrice Int               @map("target_price")
+  note        String
+  type        PriceDecisionType
+  decidedAt   DateTime          @default(now()) @map("decided_at")
+  vehicle     Vehicle           @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dealership  Dealership        @relation(fields: [dealershipId], references: [id], onDelete: Cascade)
+
+  @@index([vehicleId, decidedAt])
+  @@map("pricing_decisions")
+}
+
+model ExcludedComparable {
+  id                String     @id @default(cuid())
+  dealershipId      String     @map("dealership_id")
+  vehicleId         String     @map("vehicle_id")
+  normalizedListingId String   @map("normalized_listing_id")
+  userId            String     @map("user_id")
+  createdAt         DateTime   @default(now()) @map("created_at")
+  vehicle           Vehicle    @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  dealership        Dealership @relation(fields: [dealershipId], references: [id], onDelete: Cascade)
+
+  @@unique([vehicleId, normalizedListingId])
+  @@map("excluded_comparables")
+}
+
+model PricingFile {
+  id                   String     @id @default(cuid())
+  dealershipId         String     @map("dealership_id")
+  vehicleId            String     @map("vehicle_id")
+  userId               String     @map("user_id")
+  recommendationTarget Int        @map("recommendation_target")
+  finalTarget          Int        @map("final_target")
+  note                 String
+  comparableCount      Int        @map("comparable_count")
+  createdAt            DateTime   @default(now()) @map("created_at")
+  vehicle              Vehicle    @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  user                 User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dealership           Dealership @relation(fields: [dealershipId], references: [id], onDelete: Cascade)
+
+  @@map("pricing_files")
+}
+
+model JobRun {
+  id               String             @id @default(cuid())
+  dealershipId     String             @map("dealership_id")
+  source           SourceName
+  status           JobStatus
+  startedAt        DateTime           @default(now()) @map("started_at")
+  completedAt      DateTime?          @map("completed_at")
+  recordsProcessed Int                @default(0) @map("records_processed")
+  message          String
+  healthStatus     SourceHealthStatus @default(HEALTHY) @map("health_status")
+  createdAt        DateTime           @default(now()) @map("created_at")
+
+  @@map("job_runs")
+}
+
+model NormalizationRule {
+  id             String     @id @default(cuid())
+  dealershipId   String     @map("dealership_id")
+  dictionary     String
+  sourceValue    String     @map("source_value")
+  canonicalValue String     @map("canonical_value")
+  createdAt      DateTime   @default(now()) @map("created_at")
+  updatedAt      DateTime   @updatedAt @map("updated_at")
+  dealership     Dealership @relation(fields: [dealershipId], references: [id], onDelete: Cascade)
+
+  @@unique([dealershipId, dictionary, sourceValue])
+  @@map("normalization_rules")
+}
