@@ -7,13 +7,16 @@
     "dev": "vite",
     "dev:server": "tsx watch server/index.ts",
     "dev:worker": "tsx watch server/worker.ts",
-    "build": "tsc -b && tsc -p tsconfig.server.json && vite build",
+    "build": "prisma generate && tsc -b && tsc -p tsconfig.server.json && vite build && npx playwright install chromium",
     "preview": "vite preview",
+    "start": "node dist-server/index.js",
     "start:server": "node dist-server/index.js",
     "start:worker": "node dist-server/worker.js",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
-    "db:seed": "tsx prisma/seed.ts"
+    "db:migrate": "prisma migrate deploy",
+    "db:seed": "tsx prisma/seed.ts",
+    "postinstall": "prisma generate"
   },
   "dependencies": {
     "@prisma/client": "^6.5.0",
