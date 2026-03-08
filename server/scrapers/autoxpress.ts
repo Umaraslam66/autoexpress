@@ -18,7 +18,7 @@ export async function scrapeAutoXpressInventory(options: AutoXpressScrapeOptions
       const scrapedAt = new Date().toISOString();
 
       // Use string-based evaluation to avoid tsx transpilation issues
-      const vehicles = (await page.evaluate(`
+      const evalScript = `
         (function(scrapedAt) {
           function text(selector, query) {
             var elem = selector && selector.querySelector ? selector.querySelector(query) : null;
@@ -53,7 +53,8 @@ export async function scrapeAutoXpressInventory(options: AutoXpressScrapeOptions
             };
           });
         })("${scrapedAt}")
-      `)) as any[];
+      `;
+      const vehicles = (await page.evaluate(evalScript)) as any[];
 
       for (const item of vehicles) {
         const idMatch = item.href.match(/id=([^&]+)/);

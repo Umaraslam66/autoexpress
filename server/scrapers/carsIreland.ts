@@ -20,7 +20,7 @@ export async function scrapeCarsIrelandComparables(
     });
 
     // Use string-based evaluation to avoid tsx transpilation issues
-    const rawListings = (await page.evaluate(`
+    const evalScript = `
       (function(sourceUrl) {
         function text(node) {
           var content = node && node.textContent ? node.textContent : '';
@@ -61,7 +61,8 @@ export async function scrapeCarsIrelandComparables(
           }
         );
       })("${searchUrl.replace(/"/g, '\\"')}")
-    `)) as any[];
+    `;
+    const rawListings = (await page.evaluate(evalScript)) as any[];
 
     const scrapedAt = new Date().toISOString();
 
