@@ -39,8 +39,20 @@ export async function scrapeCarsIrelandComparables(
             var reg = text(anchor.querySelector('.cids-o-listing-card__details__vehicle-info__vehicle-reg-detail'));
             var mileage = text(anchor.querySelector('.cids-o-listing-card__details__vehicle-info__vehicle-mileage'));
             var location = text(anchor.querySelector('.cids-o-listing-card__details__location-and-save-container__location'));
-            var priceText = text(anchor.querySelector('.cids-o-listing-card__details__pricing > span'));
-            var color = text(anchor.querySelector('.cids-o-listing-card__details__vehicle-color__color-text'));
+
+            // Extract price - need to get just the first price value, not monthly payment
+            var pricingElement = anchor.querySelector('.cids-o-listing-card__details__pricing > span');
+            var priceText = '';
+            if (pricingElement && pricingElement.childNodes && pricingElement.childNodes.length > 0) {
+              // Get the first text node which contains the main price
+              var firstTextNode = pricingElement.childNodes[0];
+              priceText = firstTextNode && firstTextNode.textContent ? firstTextNode.textContent.trim() : '';
+            }
+            if (!priceText) {
+              priceText = text(pricingElement).split(/\s+/)[0] || ''; // Fallback: take first word
+            }
+
+            var colour = text(anchor.querySelector('.cids-o-listing-card__details__vehicle-color__color-text'));
 
             var imgElem = anchor.querySelector('.cids-o-listing-card__images__main__image');
             var imageStyle = imgElem && imgElem.style && imgElem.style.backgroundImage ? imgElem.style.backgroundImage : '';
@@ -54,7 +66,7 @@ export async function scrapeCarsIrelandComparables(
               mileage: mileage,
               location: location,
               priceText: priceText,
-              color: color,
+              colour: colour,
               imageStyle: imageStyle,
               sourceUrl: sourceUrl
             };
@@ -72,6 +84,30 @@ export async function scrapeCarsIrelandComparables(
         const normalizedHref = new URL(listing.href, listing.sourceUrl).href;
         const listingIdMatch = normalizedHref.match(/\/?(\d+)\?/);
         const variant = listing.paragraphs[0] ?? '';
+
+        // Try to extract fuel type from variant/description
+        let fuel = 'Unknown';
+        let transmission = 'Unknown';
+        const variantLower = variant.toLowerCase();
+
+        // Fuel type detection
+        if (variantLower.includes('tdi') || variantLower.includes('diesel')) {
+          fuel = 'Diesel';
+        } else if (variantLower.includes('tsi') || variantLower.includes('tfsi') || variantLower.includes('petrol')) {
+          fuel = 'Petrol';
+        } else if (variantLower.includes('hybrid') || variantLower.includes('phev')) {
+          fuel = 'Hybrid';
+        } else if (variantLower.includes('electric') || variantLower.includes('ev')) {
+          fuel = 'Electric';
+        }
+
+        // Transmission detection
+        if (variantLower.includes('automatic') || variantLower.includes('auto') || variantLower.includes('dsg') || variantLower.includes('s-tronic')) {
+          transmission = 'Automatic';
+        } else if (variantLower.includes('manual')) {
+          transmission = 'Manual';
+        }
+
         const comparable: ComparableListing = {
           id: `carsireland-${listingIdMatch?.[1] ?? index}`,
           vehicleId: vehicle.id,
@@ -84,8 +120,8 @@ export async function scrapeCarsIrelandComparables(
           variant,
           year: listing.year ? Number.parseInt(listing.year, 10) : vehicle.year,
           mileageKm: parseNumber(listing.mileage),
-          fuel: 'Unknown',
-          transmission: 'Unknown',
+          fuel,
+          transmission,
           bodyType: 'Unknown',
           engineLitres: undefined,
           price: parseCurrency(listing.priceText),
