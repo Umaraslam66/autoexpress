@@ -14,12 +14,12 @@ import {
 } from '../shared/mappers.js';
 import { syncAllSourcesNow } from '../sources/service.js';
 
-function latestByVehicleId<T extends { vehicleId: string } & Record<string, unknown>>(items: T[], dateKey: keyof T) {
+function latestByVehicleId<T extends { vehicleId: string }>(items: T[], getDate: (item: T) => string) {
   const map = new Map<string, T>();
   for (const item of items) {
     const existing = map.get(item.vehicleId);
-    const nextDate = new Date(String(item[dateKey])).getTime();
-    const existingDate = existing ? new Date(String(existing[dateKey])).getTime() : 0;
+    const nextDate = new Date(getDate(item)).getTime();
+    const existingDate = existing ? new Date(getDate(existing)).getTime() : 0;
     if (!existing || nextDate > existingDate) {
       map.set(item.vehicleId, item);
     }
@@ -97,7 +97,7 @@ export async function getBootstrapData(currentUserId?: string | null): Promise<A
   const comparableListings = matches.map(toComparableListingDto);
   const decisionDtos = decisions.map(toPricingDecisionDto);
   const pricingFileDtos = pricingFiles.map(toPricingFileDto);
-  const latestDecisionMap = latestByVehicleId(decisionDtos, 'decidedAt');
+  const latestDecisionMap = latestByVehicleId(decisionDtos, (decision) => decision.decidedAt);
 
   const excludedComparableRows = await prisma.excludedComparable.findMany({
     where: { dealershipId: dealership.id },

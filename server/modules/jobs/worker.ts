@@ -1,4 +1,4 @@
-import { Worker } from 'bullmq';
+import { Worker, type ConnectionOptions } from 'bullmq';
 import { getBullRedis } from '../../lib/redis.js';
 import { syncAllSourcesNow, syncAutoXpressInventoryNow, syncMarketComparablesNow } from '../sources/service.js';
 import { recomputeDealershipPricing } from '../pricing/service.js';
@@ -33,7 +33,7 @@ export async function startWorker() {
       await recomputeDealershipPricing(job.data.dealershipId);
     },
     {
-      connection,
+      connection: connection as unknown as ConnectionOptions,
     },
   );
 

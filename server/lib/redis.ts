@@ -1,11 +1,13 @@
-import Redis from 'ioredis';
+import { Redis } from 'ioredis';
 import { createClient } from 'redis';
 import { env, hasRedisConfig } from '../config/env.js';
 
-let bullRedis: Redis | null = null;
+type BullRedisClient = InstanceType<typeof Redis>;
+
+let bullRedis: BullRedisClient | null = null;
 let sessionRedisPromise: ReturnType<typeof createClient> | null = null;
 
-export function getBullRedis(): Redis | null {
+export function getBullRedis(): BullRedisClient | null {
   if (!hasRedisConfig()) {
     return null;
   }

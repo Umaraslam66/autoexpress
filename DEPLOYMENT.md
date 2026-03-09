@@ -63,16 +63,8 @@ AUTOXPRESS_FEED_URL=
 6. Run: `npm run db:push`
 7. Run: `npm run db:seed`
 
-### Step 7: Configure Frontend API URL
-You'll need to update the frontend to point to your Railway backend URL:
-
-1. Get your Railway backend URL (e.g., `https://autoxpress-production.up.railway.app`)
-2. Create `src/config.ts`:
-```typescript
-export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-```
-3. Update your API calls to use this URL
-4. Add to Railway variables: `VITE_API_URL=https://your-backend-url.railway.app`
+### Step 7: Frontend Hosting
+The Express API now serves the built Vite frontend from the same Railway web service. In production, `src/config.ts` defaults to same-origin requests, so `VITE_API_URL` is optional unless you intentionally split frontend and backend across different domains.
 
 ### Step 8: Enable Public Networking
 1. Go to Settings → Networking

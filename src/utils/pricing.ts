@@ -6,8 +6,8 @@ import type {
   PricingComputation,
   PricingDecision,
   Vehicle,
-} from '../types';
-import { average, clamp, daysBetween, median } from './format';
+} from '../types.js';
+import { average, clamp, daysBetween, median } from './format.js';
 
 function confidenceWeight(confidence: MatchConfidence): number {
   switch (confidence) {
@@ -145,4 +145,3 @@ export function computePricing(
     reasoning,
   };
 }
-

@@ -18,6 +18,12 @@ import { syncCarzoneComparables } from './adapters/carzoneWeb.js';
 import { syncCarsIrelandComparables } from './adapters/carsIrelandWeb.js';
 import { recomputeDealershipPricing } from '../pricing/service.js';
 
+type ComparableSourceName = typeof SourceName.CARZONE | typeof SourceName.CARSIRELAND;
+
+function toInputJsonValue(value: unknown): Prisma.InputJsonValue {
+  return JSON.parse(JSON.stringify(value ?? null)) as Prisma.InputJsonValue;
+}
+
 function mapConfidence(confidence: ComparableListing['confidence']): MatchConfidence {
   switch (confidence) {
     case 'high':
@@ -164,7 +170,7 @@ async function persistVehicle(
       location: vehicle.location,
       vehicleUrl: vehicle.vehicleUrl,
       imageUrl: vehicle.imageUrl,
-      notesJson: vehicle.notes,
+      notesJson: toInputJsonValue(vehicle.notes),
       sourceRunId,
       lastSeenAt: new Date(),
     },
@@ -191,7 +197,7 @@ async function persistVehicle(
       location: vehicle.location,
       vehicleUrl: vehicle.vehicleUrl,
       imageUrl: vehicle.imageUrl,
-      notesJson: vehicle.notes,
+      notesJson: toInputJsonValue(vehicle.notes),
       sourceRunId,
     },
   });
@@ -203,7 +209,7 @@ async function persistVehicle(
       price: vehicle.price,
       mileageKm: vehicle.mileageKm,
       status: mapVehicleStatus(vehicle.status),
-      snapshotJson: vehicle,
+      snapshotJson: toInputJsonValue(vehicle),
     },
   });
 
@@ -226,7 +232,7 @@ async function persistComparable(
       kind: ListingKind.COMPARABLE,
       externalId: comparable.listingId,
       listingUrl: comparable.listingUrl,
-      payloadJson: rawPayload as Prisma.InputJsonValue,
+      payloadJson: toInputJsonValue(rawPayload),
     },
   });
 
@@ -258,7 +264,7 @@ async function persistComparable(
       daysListed: comparable.daysListed,
       imageUrl: comparable.imageUrl ?? null,
       lastSeenAt: sanitizeDate(comparable.lastSeenAt) ?? new Date(),
-      rawValuesJson: comparable as unknown as Prisma.InputJsonValue,
+      rawValuesJson: toInputJsonValue(comparable),
       isActive: true,
     },
     create: {
@@ -284,7 +290,7 @@ async function persistComparable(
       daysListed: comparable.daysListed,
       imageUrl: comparable.imageUrl ?? null,
       lastSeenAt: sanitizeDate(comparable.lastSeenAt) ?? new Date(),
-      rawValuesJson: comparable as unknown as Prisma.InputJsonValue,
+      rawValuesJson: toInputJsonValue(comparable),
     },
   });
 
@@ -328,7 +334,7 @@ export async function syncAutoXpressInventoryNow(dealershipId: string) {
   const feedSource = inventorySources.find((source) => source.mode === InventorySourceMode.FEED);
   const scrapeSource = inventorySources.find((source) => source.mode === InventorySourceMode.SCRAPE);
 
-  let mode = InventorySourceMode.SCRAPE;
+  let mode: InventorySourceMode = InventorySourceMode.SCRAPE;
   let inventorySourceId = scrapeSource?.id;
   let vehicles: Vehicle[] = [];
   let message = '';
@@ -379,7 +385,7 @@ export async function syncAutoXpressInventoryNow(dealershipId: string) {
             kind: ListingKind.INVENTORY,
             externalId: vehicle.stockId,
             listingUrl: vehicle.vehicleUrl,
-            payloadJson: (rawPayloads[index]?.payload ?? vehicle) as Prisma.InputJsonValue,
+            payloadJson: toInputJsonValue(rawPayloads[index]?.payload ?? vehicle),
           },
         });
       }
@@ -421,7 +427,7 @@ export async function syncAutoXpressInventoryNow(dealershipId: string) {
 
 async function syncComparableSource(
   dealershipId: string,
-  source: SourceName.CARZONE | SourceName.CARSIRELAND,
+  source: ComparableSourceName,
 ) {
   const inventorySource = await prisma.inventorySource.findFirst({
     where: { dealershipId, source, enabled: true },

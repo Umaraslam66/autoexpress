@@ -4,8 +4,8 @@ import type {
   PricingDecision,
   PricingFileRecord,
   Vehicle,
-} from '../types';
-import { getFreshnessStatus, computePricing } from './pricing';
+} from '../types.js';
+import { getFreshnessStatus, computePricing } from './pricing.js';
 
 export interface VehicleInsight {
   vehicle: Vehicle;
@@ -75,4 +75,3 @@ export function buildVehicleInsights(
     };
   });
 }
-

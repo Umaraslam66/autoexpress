@@ -1,5 +1,5 @@
-import type { ComparableListing, PricingDecision, PricingFileRecord, Vehicle } from '../types';
-import { formatDateTime } from './format';
+import type { ComparableListing, PricingDecision, PricingFileRecord, Vehicle } from '../types.js';
+import { formatDateTime } from './format.js';
 
 function escapeCsv(value: string | number): string {
   const stringValue = String(value).replace(/"/g, '""');

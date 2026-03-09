@@ -1,4 +1,4 @@
-import { Queue } from 'bullmq';
+import { Queue, type ConnectionOptions } from 'bullmq';
 import { getBullRedis } from '../../lib/redis.js';
 
 export const INGESTION_QUEUE_NAME = 'autoxpress-ingestion';
@@ -13,7 +13,7 @@ export function getIngestionQueue(): Queue | null {
 
   if (!ingestionQueue) {
     ingestionQueue = new Queue(INGESTION_QUEUE_NAME, {
-      connection,
+      connection: connection as unknown as ConnectionOptions,
     });
   }
 

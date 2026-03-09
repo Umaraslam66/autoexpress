@@ -1,5 +1,7 @@
 import cors from 'cors';
 import express from 'express';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 import { computePricing } from '../src/utils/pricing.js';
 import { env, hasDatabaseConfig } from './config/env.js';
@@ -37,6 +39,10 @@ const comparableExclusionSchema = z.object({
 const refreshSchema = z.object({
   source: z.union([z.literal('all'), z.literal('autoxpress'), z.literal('carzone'), z.literal('carsireland')]),
 });
+
+const currentDir = path.dirname(fileURLToPath(import.meta.url));
+const frontendDistDir = path.resolve(currentDir, '../../dist');
+const frontendIndexPath = path.join(frontendDistDir, 'index.html');
 
 async function start() {
   if (!hasDatabaseConfig()) {
@@ -102,15 +108,16 @@ async function start() {
 
   app.get('/api/vehicles/:id', asyncHandler(async (req, res) => {
     const user = await requireCurrentUser(req);
-    const detail = await getVehicleDetail(req.session.dealershipId ?? '', req.params.id);
+    const vehicleId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const detail = await getVehicleDetail(req.session.dealershipId ?? '', vehicleId);
     if (!detail) {
       throw new HttpError(404, 'Vehicle not found.');
     }
     const payload = await getBootstrapData(user.id);
-    const comparables = payload.comparableListings.filter((listing) => listing.vehicleId === req.params.id);
-    const decision = payload.pricingDecisions[req.params.id] ?? null;
-    const excludedComparableIds = payload.excludedComparables[req.params.id] ?? [];
-    const latestPricingFile = payload.pricingFiles.find((record) => record.vehicleId === req.params.id) ?? null;
+    const comparables = payload.comparableListings.filter((listing) => listing.vehicleId === vehicleId);
+    const decision = payload.pricingDecisions[vehicleId] ?? null;
+    const excludedComparableIds = payload.excludedComparables[vehicleId] ?? [];
+    const latestPricingFile = payload.pricingFiles.find((record) => record.vehicleId === vehicleId) ?? null;
     const pricing = computePricing(detail.vehicle, comparables, excludedComparableIds, decision);
     res.json({
       vehicle: detail.vehicle,
@@ -124,20 +131,22 @@ async function start() {
 
   app.get('/api/vehicles/:id/comparables', asyncHandler(async (req, res) => {
     const user = await requireCurrentUser(req);
+    const vehicleId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
     const payload = await getBootstrapData(user.id);
-    res.json(payload.comparableListings.filter((listing) => listing.vehicleId === req.params.id));
+    res.json(payload.comparableListings.filter((listing) => listing.vehicleId === vehicleId));
   }));
 
   app.get('/api/vehicles/:id/pricing', asyncHandler(async (req, res) => {
     const user = await requireCurrentUser(req);
+    const vehicleId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
     const payload = await getBootstrapData(user.id);
-    const vehicle = payload.vehicles.find((candidate) => candidate.id === req.params.id);
+    const vehicle = payload.vehicles.find((candidate) => candidate.id === vehicleId);
     if (!vehicle) {
       throw new HttpError(404, 'Vehicle not found.');
     }
-    const comparables = payload.comparableListings.filter((listing) => listing.vehicleId === req.params.id);
-    const decision = payload.pricingDecisions[req.params.id];
-    const excludedComparableIds = payload.excludedComparables[req.params.id] ?? [];
+    const comparables = payload.comparableListings.filter((listing) => listing.vehicleId === vehicleId);
+    const decision = payload.pricingDecisions[vehicleId];
+    const excludedComparableIds = payload.excludedComparables[vehicleId] ?? [];
     const pricing = computePricing(vehicle, comparables, excludedComparableIds, decision);
     res.json({
       pricing,
@@ -148,15 +157,17 @@ async function start() {
 
   app.post('/api/vehicles/:id/decision', asyncHandler(async (req, res) => {
     const user = await requireCurrentUser(req);
+    const vehicleId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
     const payload = pricingDecisionSchema.parse(req.body);
-    const decision = await createPricingDecision(req.session.dealershipId ?? '', user.id, req.params.id, payload);
+    const decision = await createPricingDecision(req.session.dealershipId ?? '', user.id, vehicleId, payload);
     res.status(201).json(decision);
   }));
 
   app.post('/api/vehicles/:id/exclusions', asyncHandler(async (req, res) => {
     const user = await requireCurrentUser(req);
+    const vehicleId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
     const payload = comparableExclusionSchema.parse(req.body);
-    await toggleComparableExclusion(req.session.dealershipId ?? '', user.id, req.params.id, payload);
+    await toggleComparableExclusion(req.session.dealershipId ?? '', user.id, vehicleId, payload);
     res.status(204).end();
   }));
 
@@ -225,6 +236,12 @@ async function start() {
     await recomputeDealershipPricing(dealershipId);
     res.json({ queued: false, result });
   }));
+
+  app.use(express.static(frontendDistDir));
+
+  app.get(/^(?!\/api(?:\/|$)).*/, (_req, res) => {
+    res.sendFile(frontendIndexPath);
+  });
 
   app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
     const statusCode = error instanceof HttpError ? error.statusCode : 500;
