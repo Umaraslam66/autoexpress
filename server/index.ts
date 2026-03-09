@@ -52,6 +52,10 @@ async function start() {
   const app = express();
   const sessionMiddleware = await createSessionMiddleware();
 
+  // Railway terminates TLS at the proxy, so Express must trust the proxy
+  // for secure session cookies to be set correctly in production.
+  app.set('trust proxy', 1);
+
   app.use(
     cors({
       origin: true,

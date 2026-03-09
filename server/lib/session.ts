@@ -19,6 +19,7 @@ export async function createSessionMiddleware() {
       secret: env.sessionSecret,
       resave: false,
       saveUninitialized: false,
+      proxy: env.nodeEnv === 'production',
       cookie: {
         httpOnly: true,
         sameSite: 'lax',
@@ -37,6 +38,7 @@ export async function createSessionMiddleware() {
     secret: env.sessionSecret,
     resave: false,
     saveUninitialized: false,
+    proxy: env.nodeEnv === 'production',
     cookie: {
       httpOnly: true,
       sameSite: 'lax',
