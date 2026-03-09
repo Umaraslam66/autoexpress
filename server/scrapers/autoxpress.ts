@@ -1,5 +1,5 @@
 import type { Vehicle } from '../../src/types.js';
-import { withBrowserContext } from '../lib/browser.js';
+import { gotoWithRetry, withBrowserContext } from '../lib/browser.js';
 import { cleanText, milesToKm, parseCurrency, parseNumber, parseYear } from '../lib/parse.js';
 
 interface AutoXpressScrapeOptions {
@@ -26,7 +26,7 @@ export async function scrapeAutoXpressInventory(options: AutoXpressScrapeOptions
   await withBrowserContext(async (_context, page) => {
     // PASS 1: Collect all vehicle listings from all pages
     console.log('Pass 1: Collecting vehicle listings from all pages...');
-    await page.goto('https://www.autoxpress.ie/search', { waitUntil: 'domcontentloaded', timeout: 60000 });
+    await gotoWithRetry(page, 'https://www.autoxpress.ie/search', { waitUntil: 'domcontentloaded', timeout: 60000 });
     await page.waitForSelector('.car-tile', { timeout: 30000 });
 
     for (let pageIndex = 0; pageIndex < options.maxPages; pageIndex += 1) {
@@ -142,7 +142,7 @@ export async function scrapeAutoXpressInventory(options: AutoXpressScrapeOptions
 
       try {
         const detailUrl = new URL(item.href, 'https://www.autoxpress.ie').href;
-        await page.goto(detailUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+        await gotoWithRetry(page, detailUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
 
         // Wait for detail section with shorter timeout since we're doing many pages
         await page.waitForTimeout(500);

@@ -1,5 +1,5 @@
 import type { ComparableListing, Vehicle } from '../../src/types.js';
-import { dismissConsent, withBrowserContext } from '../lib/browser.js';
+import { dismissConsent, gotoWithRetry, withBrowserContext } from '../lib/browser.js';
 import { scoreComparable } from '../lib/matching.js';
 import { cleanText, extractStyleUrl, parseCurrency, parseNumber, safeModelSlug, slugify } from '../lib/parse.js';
 
@@ -13,7 +13,7 @@ export async function scrapeCarsIrelandComparables(
 ): Promise<ComparableListing[]> {
   return withBrowserContext(async (_context, page) => {
     const searchUrl = `https://www.carsireland.ie/used-cars/${slugify(vehicle.make)}/${safeModelSlug(vehicle.model)}`;
-    await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
+    await gotoWithRetry(page, searchUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
     await dismissConsent(page);
     await page.waitForSelector('a[href*="journey=Search"], a[href*="journey=FeaturedListing"]', {
       timeout: 30000,
@@ -146,4 +146,3 @@ export async function scrapeCarsIrelandComparables(
       .slice(0, options.maxResults);
   });
 }
-

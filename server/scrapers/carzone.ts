@@ -1,5 +1,5 @@
 import type { ComparableListing, Vehicle } from '../../src/types.js';
-import { dismissConsent, withBrowserContext } from '../lib/browser.js';
+import { dismissConsent, gotoWithRetry, withBrowserContext } from '../lib/browser.js';
 import { scoreComparable } from '../lib/matching.js';
 import { cleanText, extractStyleUrl, parseCurrency, parseNumber, safeModelSlug, slugify } from '../lib/parse.js';
 
@@ -10,7 +10,7 @@ interface SearchOptions {
 export async function scrapeCarzoneComparables(vehicle: Vehicle, options: SearchOptions): Promise<ComparableListing[]> {
   return withBrowserContext(async (_context, page) => {
     const searchUrl = `https://www.carzone.ie/used-cars/${slugify(vehicle.make)}/${safeModelSlug(vehicle.model)}`;
-    await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
+    await gotoWithRetry(page, searchUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
     await dismissConsent(page);
     await page.waitForSelector('.stock-summary', { timeout: 30000 });
 
@@ -103,4 +103,3 @@ export async function scrapeCarzoneComparables(vehicle: Vehicle, options: Search
       .slice(0, options.maxResults);
   });
 }
-
