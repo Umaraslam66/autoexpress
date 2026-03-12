@@ -179,6 +179,10 @@ export function AppStateProvider({ children }: PropsWithChildren) {
         });
       },
       savePricingDecision: async (vehicleId, input) => {
+        if (dataState.meta.mode === 'seed') {
+          setSyncError('Demo mode is read-only. Pricing decisions are disabled in this environment.');
+          return;
+        }
         await fetchJson(`/api/vehicles/${vehicleId}/decision`, {
           method: 'POST',
           body: JSON.stringify(input),
@@ -186,6 +190,10 @@ export function AppStateProvider({ children }: PropsWithChildren) {
         await refresh();
       },
       toggleComparable: async (vehicleId, comparableId) => {
+        if (dataState.meta.mode === 'seed') {
+          setSyncError('Demo mode is read-only. Comparable exclusions are disabled in this environment.');
+          return;
+        }
         const excludedIds = dataState.excludedComparables[vehicleId] ?? [];
         await fetchJson(`/api/vehicles/${vehicleId}/exclusions`, {
           method: 'POST',
@@ -197,6 +205,10 @@ export function AppStateProvider({ children }: PropsWithChildren) {
         await refresh();
       },
       createPricingFile: async (vehicleId) => {
+        if (dataState.meta.mode === 'seed') {
+          setSyncError('Demo mode is read-only. Pricing file generation is disabled in this environment.');
+          return null;
+        }
         const payload = await fetchJson<{ record: PricingFileRecord }>(`/api/pricing-files`, {
           method: 'POST',
           body: JSON.stringify({ vehicleId }),
@@ -206,6 +218,10 @@ export function AppStateProvider({ children }: PropsWithChildren) {
       },
       refresh,
       runAdminRefresh: async (source) => {
+        if (dataState.meta.mode === 'seed') {
+          setSyncError('Demo mode is active. Live source refresh is disabled in this environment.');
+          return;
+        }
         await fetchJson('/api/admin/refresh', {
           method: 'POST',
           body: JSON.stringify({ source }),

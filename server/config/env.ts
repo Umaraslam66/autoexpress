@@ -11,6 +11,7 @@ function parseIntEnv(value: string | undefined, fallback: number): number {
 
 export const env = {
   nodeEnv: process.env.NODE_ENV ?? 'development',
+  demoMode: process.env.DEMO_MODE === 'true',
   port: parseIntEnv(process.env.PORT, DEFAULT_PORT),
   sessionSecret: process.env.SESSION_SECRET ?? 'autoxpress-dev-session-secret',
   databaseUrl: process.env.DATABASE_URL ?? '',

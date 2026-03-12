@@ -14,6 +14,7 @@ export function VehicleDetailPage() {
   const vehicle = state.vehicles.find((candidate) => candidate.id === vehicleId);
   const [draftPrice, setDraftPrice] = useState<number | ''>('');
   const [draftNote, setDraftNote] = useState('');
+  const isDemoMode = state.dataMode === 'seed';
 
   if (!vehicle) {
     return <Navigate to="/inventory" replace />;
@@ -84,7 +85,7 @@ export function VehicleDetailPage() {
             Next
           </Link>
           <button type="button" className="primary-button" onClick={() => void handleGeneratePricingFile()}>
-            Generate pricing file
+            {isDemoMode ? 'Pricing file disabled in demo' : 'Generate pricing file'}
           </button>
         </div>
       }
@@ -175,6 +176,7 @@ export function VehicleDetailPage() {
                           <button
                             type="button"
                             className="ghost-button"
+                            disabled={isDemoMode}
                             onClick={() => {
                               void state.toggleComparable(currentVehicle.id, listing.id);
                             }}
@@ -255,24 +257,29 @@ export function VehicleDetailPage() {
                   <p key={reason}>{reason}</p>
                 ))}
               </div>
+              {isDemoMode ? (
+                <p>Demo mode is active. Pricing edits and exports are disabled for this review build.</p>
+              ) : null}
 
               <textarea
                 rows={4}
                 placeholder="Add pricing rationale or override note"
                 value={draftNote}
                 onChange={(event) => setDraftNote(event.target.value)}
+                disabled={isDemoMode}
               />
               <input
                 type="number"
                 value={draftPrice}
                 onChange={(event) => setDraftPrice(event.target.value === '' ? '' : Number(event.target.value))}
                 placeholder="Manual target price"
+                disabled={isDemoMode}
               />
               <div className="stack-actions">
-                <button type="button" className="primary-button" onClick={() => void handleAcceptRecommendation()}>
+                <button type="button" className="primary-button" onClick={() => void handleAcceptRecommendation()} disabled={isDemoMode}>
                   Accept recommendation
                 </button>
-                <button type="button" className="secondary-button" onClick={() => void handleSaveManualDecision()}>
+                <button type="button" className="secondary-button" onClick={() => void handleSaveManualDecision()} disabled={isDemoMode}>
                   Save manual target
                 </button>
               </div>

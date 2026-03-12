@@ -5,7 +5,7 @@ import type {
   NormalizationRule,
   SourceHealth,
   Vehicle,
-} from '../types';
+} from '../types.js';
 
 export const users: AppUser[] = [
   {

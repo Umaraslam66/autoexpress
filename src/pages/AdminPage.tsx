@@ -8,6 +8,7 @@ import { formatDateTime } from '../utils/format';
 export function AdminPage() {
   const state = useAppState();
   const [refreshingSource, setRefreshingSource] = useState<string | null>(null);
+  const isDemoMode = state.dataMode === 'seed';
 
   async function handleRefresh(source: 'all' | 'autoxpress' | 'carzone' | 'carsireland') {
     setRefreshingSource(source);
@@ -24,21 +25,26 @@ export function AdminPage() {
       subtitle="Operational control surface for users, ingestion runs, source health, and normalization dictionaries."
       actions={
         <div className="action-row">
-          <button type="button" className="secondary-button" onClick={() => void handleRefresh('autoxpress')}>
+          <button type="button" className="secondary-button" onClick={() => void handleRefresh('autoxpress')} disabled={isDemoMode}>
             {refreshingSource === 'autoxpress' ? 'Syncing AutoXpress...' : 'Sync AutoXpress'}
           </button>
-          <button type="button" className="secondary-button" onClick={() => void handleRefresh('carzone')}>
+          <button type="button" className="secondary-button" onClick={() => void handleRefresh('carzone')} disabled={isDemoMode}>
             {refreshingSource === 'carzone' ? 'Syncing Carzone...' : 'Sync Carzone'}
           </button>
-          <button type="button" className="secondary-button" onClick={() => void handleRefresh('carsireland')}>
+          <button type="button" className="secondary-button" onClick={() => void handleRefresh('carsireland')} disabled={isDemoMode}>
             {refreshingSource === 'carsireland' ? 'Syncing CarsIreland...' : 'Sync CarsIreland'}
           </button>
-          <button type="button" className="primary-button" onClick={() => void handleRefresh('all')}>
+          <button type="button" className="primary-button" onClick={() => void handleRefresh('all')} disabled={isDemoMode}>
             {refreshingSource === 'all' ? 'Refreshing All...' : 'Refresh All Sources'}
           </button>
         </div>
       }
     >
+      {isDemoMode ? (
+        <SectionCard title="Demo mode" description="This deployment is intentionally frozen for client user-flow review.">
+          <p>Live refresh jobs are disabled. Source health and job history below are curated sample records.</p>
+        </SectionCard>
+      ) : null}
       <section className="dashboard-grid">
         <SectionCard title="Users" description="Role-based access seed for the MVP.">
           <div className="stack-list">

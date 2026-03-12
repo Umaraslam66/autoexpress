@@ -45,7 +45,7 @@ const frontendDistDir = path.resolve(currentDir, '../../dist');
 const frontendIndexPath = path.join(frontendDistDir, 'index.html');
 
 async function start() {
-  if (!hasDatabaseConfig()) {
+  if (!env.demoMode && !hasDatabaseConfig()) {
     throw new Error('DATABASE_URL is required to start the AutoXpress API.');
   }
 
@@ -66,7 +66,7 @@ async function start() {
   app.use(sessionMiddleware);
 
   app.get('/api/health', asyncHandler(async (_req, res) => {
-    const dealership = await ensureSystemSeed();
+    const dealership = env.demoMode ? { id: 'demo-dealership' } : await ensureSystemSeed();
     res.json({
       status: 'ok',
       checkedAt: new Date().toISOString(),
@@ -210,6 +210,15 @@ async function start() {
     const user = await requireCurrentUser(req);
     const payload = refreshSchema.parse(req.body);
     const dealershipId = req.session.dealershipId ?? '';
+
+    if (env.demoMode) {
+      res.json({
+        queued: false,
+        messages: ['Demo mode is active. Live source refresh is disabled for this environment.'],
+        userId: user.id,
+      });
+      return;
+    }
 
     if (payload.source === 'all') {
       const queued = await enqueueSyncAll(dealershipId);
