@@ -1,5 +1,14 @@
 import type { ApiBootstrapData, ComparableListing, PricingDecision, PricingFileRecord, Vehicle } from '../../../src/types.js';
+import {
+  comparableListings as demoComparableListings,
+  jobRuns as demoJobRuns,
+  normalizationRules as demoNormalizationRules,
+  sourceHealth as demoSourceHealth,
+  users as demoUsers,
+  vehicles as demoVehicles,
+} from '../../../src/data/mockData.js';
 import { buildVehicleInsights } from '../../../src/utils/vehicleAnalysis.js';
+import { env } from '../../config/env.js';
 import { prisma } from '../../lib/prisma.js';
 import { ensureSystemSeed } from '../setup/service.js';
 import {
@@ -12,7 +21,6 @@ import {
   toSourceHealth,
   toVehicleDto,
 } from '../shared/mappers.js';
-import { syncAllSourcesNow } from '../sources/service.js';
 
 function latestByVehicleId<T extends { vehicleId: string }>(items: T[], getDate: (item: T) => string) {
   const map = new Map<string, T>();
@@ -27,22 +35,63 @@ function latestByVehicleId<T extends { vehicleId: string }>(items: T[], getDate:
   return map;
 }
 
+function buildDemoBootstrap(currentUserId?: string | null): ApiBootstrapData {
+  const pricingDecisions: Record<string, PricingDecision> = {};
+  const excludedComparables: Record<string, string[]> = {};
+  const pricingFiles: PricingFileRecord[] = [];
+  const insights = buildVehicleInsights(
+    demoVehicles,
+    demoComparableListings,
+    pricingDecisions,
+    excludedComparables,
+    pricingFiles,
+  );
+
+  return {
+    users: demoUsers,
+    vehicles: demoVehicles,
+    comparableListings: demoComparableListings,
+    sourceHealth: demoSourceHealth,
+    jobRuns: demoJobRuns,
+    normalizationRules: demoNormalizationRules,
+    pricingDecisions,
+    excludedComparables,
+    pricingFiles,
+    currentUser: demoUsers.find((user) => user.id === currentUserId) ?? demoUsers[0] ?? null,
+    dashboard: {
+      totalVehicles: demoVehicles.length,
+      sufficientComparables: insights.filter((insight) => insight.pricing.comparableCount >= 3).length,
+      needingReview: insights.filter((insight) => insight.needsReview).length,
+      aboveMarket: insights.filter((insight) => insight.pricing.currentPosition === 'above_market').length,
+      belowMarket: insights.filter((insight) => insight.pricing.currentPosition === 'below_market').length,
+      averageDaysInStock:
+        insights.length === 0
+          ? 0
+          : Math.round(
+              insights.reduce(
+                (total, insight) =>
+                  total + Math.max(0, Math.round((Date.now() - new Date(insight.vehicle.dateAdded).getTime()) / (1000 * 60 * 60 * 24))),
+                0,
+              ) / insights.length,
+            ),
+    },
+    meta: {
+      generatedAt: new Date().toISOString(),
+      mode: 'seed',
+      messages: [
+        'Demo mode is active. The dashboard is using curated sample data for client review.',
+        'Live scraping, background sync, and database-backed write actions are disabled in this environment.',
+      ],
+    },
+  };
+}
+
 export async function getBootstrapData(currentUserId?: string | null): Promise<ApiBootstrapData> {
-  const dealership = await ensureSystemSeed();
-
-  const vehicleCount = await prisma.vehicle.count({
-    where: { dealershipId: dealership.id },
-  });
-
-  const messages: string[] = [];
-  if (vehicleCount === 0) {
-    try {
-      const syncMessages = await syncAllSourcesNow(dealership.id);
-      messages.push(...syncMessages);
-    } catch (error) {
-      messages.push(error instanceof Error ? error.message : 'Initial source sync failed.');
-    }
+  if (env.demoMode) {
+    return buildDemoBootstrap(currentUserId);
   }
+
+  const dealership = await ensureSystemSeed();
 
   const [users, normalizationRules, inventorySources, jobRuns, vehicles, matches, decisions, pricingFiles] = await Promise.all([
     prisma.user.findMany({
@@ -180,7 +229,7 @@ export async function getBootstrapData(currentUserId?: string | null): Promise<A
     meta: {
       generatedAt: new Date().toISOString(),
       mode: 'live',
-      messages: messages.length ? messages : ['Live data is being served from PostgreSQL-backed source syncs.'],
+      messages: ['Live data is being served from PostgreSQL-backed source syncs.'],
     },
   };
 }

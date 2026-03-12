@@ -11,6 +11,7 @@
     "preview": "vite preview",
     "start": "node dist-server/server/index.js",
     "start:server": "node dist-server/server/index.js",
+    "start:web": "npx prisma db push && node dist-server/server/index.js",
     "start:worker": "node dist-server/server/worker.js",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",

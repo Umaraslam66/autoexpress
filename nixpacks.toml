@@ -1,5 +1,5 @@
 [phases.setup]
-nixPkgs = ["nodejs_20", "playwright-driver"]
+nixPkgs = ["nodejs_20"]
 aptPkgs = [
   "libglib2.0-0",
   "libnss3",
@@ -33,5 +33,8 @@ cmds = ["npm ci"]
 [phases.build]
 cmds = ["npm run build"]
 
+[variables]
+PLAYWRIGHT_BROWSERS_PATH = "/app/.playwright-browsers"
+
 [start]
-cmd = "npm run start"
+cmd = "npm run start:web"

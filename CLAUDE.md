@@ -1,975 +1,562 @@
-# AutoXpress Pricing Intelligence Platform - Development Documentation
+# AutoXpress Pricing Intelligence Platform
 
-## 📋 Project Overview
+## Project Overview
 
-**Product Name:** AutoXpress Pricing Intelligence Platform
-**Type:** Internal web-based pricing tool with future SaaS potential
-**Purpose:** Automate competitive pricing analysis for used car dealership
+**Product:** AutoXpress Pricing Intelligence Platform
+**Type:** Internal web-based pricing tool (future SaaS potential)
+**Purpose:** Automate competitive pricing analysis for a used car dealership
 **Client:** AutoXpress Ireland (400+ vehicle inventory)
+**Status:** Production-ready, all scrapers operational, 100% data coverage
 
-### Business Problem Solved
+### The Problem
+AutoXpress manually checks pricing across competitor websites (carzone.ie, carsireland.ie), which is time-consuming, inconsistent, and leaves no audit trail. This platform replaces that manual process entirely.
 
-AutoXpress manually checks pricing across multiple competitor websites (autoxpress.ie, carzone.ie, carsireland.ie), which is:
-- Time-consuming and operationally expensive
-- Inconsistent across stock
-- Slows down pricing and buying decisions
-- No audit trail or historical tracking
-
-### Solution Delivered
-
-A comprehensive platform that:
-1. ✅ Automatically scrapes AutoXpress inventory
-2. ✅ Collects comparable listings from competitors (Carzone, CarsIreland)
-3. ✅ Matches vehicles using intelligent scoring algorithm
-4. ✅ Generates pricing recommendations with clear reasoning
-5. ✅ Provides exportable pricing files and audit history
-6. ✅ Allows manual override with notes
+### The Solution
+1. Scrapes AutoXpress's own inventory from autoxpress.ie
+2. Scrapes comparable listings from Carzone and CarsIreland
+3. Matches vehicles using an intelligent scoring algorithm
+4. Generates data-driven pricing recommendations
+5. Allows user decisions with full history and audit trail
+6. Exports pricing files for operations
 
 ---
 
-## 🏗️ Architecture Overview
+## Tech Stack
 
-### Tech Stack
-
-**Frontend:**
-- React 18.3.1 with TypeScript
-- Vite for build tooling
-- React Router for navigation
-- Tailwind CSS for styling
-- TanStack Query for data fetching (planned)
-
-**Backend:**
-- Node.js 20+ with TypeScript
-- Express 4.22.1 for API server
-- Prisma ORM for database management
-- PostgreSQL for data storage
-- Redis for job queues and caching
-- BullMQ for background job processing
-
-**Scraping:**
-- Playwright 1.58.2 for robust web scraping
-- Chromium browser automation
-- Rate limiting and retry logic built-in
-- String-based evaluation to avoid transpilation issues
-
-**Infrastructure:**
-- Docker Compose for local development (PostgreSQL + Redis)
-- Railway.app for production deployment
-- Background worker for async scraping jobs
-
-### System Architecture
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                         FRONTEND (React)                         │
-│  Dashboard │ Inventory │ Vehicle Detail │ Pricing │ Admin       │
-└───────────────────────────┬─────────────────────────────────────┘
-                            │
-                            │ REST API
-                            │
-┌───────────────────────────▼─────────────────────────────────────┐
-│                    API SERVER (Express)                          │
-│  Auth │ Vehicles │ Pricing │ Exports │ Admin │ Job Triggers     │
-└───────────────┬───────────────────────────────┬─────────────────┘
-                │                               │
-                │                               │ Enqueue Jobs
-                │                               │
-┌───────────────▼───────────┐        ┌──────────▼──────────────┐
-│   PostgreSQL Database      │        │    Redis + BullMQ       │
-│  - Vehicles                │        │  - Job Queue            │
-│  - Raw Listings            │        │  - Session Store        │
-│  - Normalized Listings     │        │  - Cache                │
-│  - Matches                 │        └──────────┬──────────────┘
-│  - Pricing Recommendations │                   │
-│  - Decisions & History     │                   │ Process Jobs
-│  - Audit Logs              │                   │
-└────────────────────────────┘        ┌──────────▼──────────────┐
-                                      │   BACKGROUND WORKER      │
-                                      │  - Scraping Jobs         │
-                                      │  - Matching Engine       │
-                                      │  - Pricing Engine        │
-                                      └──────────┬──────────────┘
-                                                 │
-                                                 │ Playwright
-                                                 │
-                      ┌──────────────────────────┴─────────────────────────┐
-                      │                                                    │
-          ┌───────────▼──────────┐  ┌──────────────┐  ┌─────────────────┐
-          │  autoxpress.ie       │  │  carzone.ie  │  │  carsireland.ie │
-          │  (Own Inventory)     │  │ (Competitor) │  │  (Competitor)   │
-          └──────────────────────┘  └──────────────┘  └─────────────────┘
-```
+| Layer | Technology |
+|---|---|
+| Frontend | React 18 + TypeScript, Vite, Tailwind CSS, React Router |
+| Backend | Node.js 20, Express 4, TypeScript |
+| ORM | Prisma with PostgreSQL |
+| Job Queue | BullMQ + Redis |
+| Scraping | Playwright (headless Chromium) |
+| Auth | express-session + bcryptjs |
+| Infra | Docker Compose (local), Railway.app (production) |
 
 ---
 
-## 🗂️ Project Structure
+## Architecture
+
+```
+Frontend (React SPA)
+       │ REST API calls (/api/*)
+       ▼
+Express API Server (server/index.ts)
+   ├── Auth (/api/auth/*)
+   ├── Vehicles (/api/vehicles/*)
+   ├── Admin (/api/admin/*)
+   └── Bootstrap (/api/bootstrap)
+       │
+       ├──── PostgreSQL (via Prisma)
+       ├──── Redis (sessions + BullMQ queue)
+       └──── Background Worker (server/worker.ts)
+                  │ Playwright
+                  ▼
+         ┌────────────────────────────┐
+         │  autoxpress.ie (inventory) │
+         │  carzone.ie (comparables)  │
+         │  carsireland.ie (comps)    │
+         └────────────────────────────┘
+```
+
+**Key architectural decision:** Bootstrap pattern — the frontend fetches all data in a single `/api/bootstrap` call on login and stores it in a global React context. All pages work from this in-memory state and refetch on mutations.
+
+---
+
+## Project Structure
 
 ```
 autoexpress/
-├── src/                          # Frontend React application
-│   ├── components/               # Reusable UI components
-│   ├── pages/                    # Page components
-│   ├── utils/                    # Helper functions
-│   ├── types.ts                  # TypeScript type definitions
-│   ├── config.ts                 # API configuration
-│   └── App.tsx                   # Main app component
+├── src/                          # Frontend
+│   ├── App.tsx                   # Route definitions (protected + public)
+│   ├── main.tsx                  # Entry point, wraps with BrowserRouter + AppStateProvider
+│   ├── config.ts                 # API_URL config (VITE_API_URL env or '')
+│   ├── types.ts                  # All TypeScript interfaces
+│   ├── context/AppState.tsx      # Global state — ALL data lives here
+│   ├── pages/
+│   │   ├── LoginPage.tsx         # Auth with pre-filled credentials
+│   │   ├── DashboardPage.tsx     # KPIs, priority queue, source health
+│   │   ├── InventoryPage.tsx     # Filterable vehicle table + CSV export
+│   │   ├── VehicleDetailPage.tsx # Comparables, pricing recommendation, decision form
+│   │   ├── PricingQueuePage.tsx  # Vehicles needing pricing attention
+│   │   ├── PricingFilesPage.tsx  # Generated pricing records
+│   │   └── AdminPage.tsx         # Scraping triggers, job history, user list
+│   ├── components/
+│   │   ├── layout/AppShell.tsx   # Page wrapper with sidebar + status banner
+│   │   ├── layout/Sidebar.tsx    # Navigation + user profile
+│   │   └── ui/                   # Badge, KpiCard, SectionCard
+│   └── utils/
+│       ├── pricing.ts            # computePricing() — core pricing algorithm
+│       ├── vehicleAnalysis.ts    # buildVehicleInsights() — attention scores
+│       ├── csv.ts                # CSV export helpers
+│       └── format.ts             # Currency/date/number formatters
 │
-├── server/                       # Backend application
-│   ├── index.ts                  # Express API server entry point
-│   ├── worker.ts                 # Background worker entry point
-│   │
-│   ├── config/                   # Configuration
-│   │   ├── env.ts               # Environment variable handling
-│   │   └── defaults.ts          # Default users, normalization rules
-│   │
-│   ├── lib/                      # Shared libraries
-│   │   ├── auth.ts              # Password hashing
-│   │   ├── browser.ts           # Playwright browser management
-│   │   ├── http.ts              # HTTP error handling
-│   │   ├── matching.ts          # Vehicle matching algorithm
-│   │   ├── parse.ts             # Data parsing utilities
-│   │   ├── prisma.ts            # Prisma client
-│   │   ├── redis.ts             # Redis client
-│   │   └── session.ts           # Session middleware
-│   │
-│   ├── modules/                  # Feature modules
-│   │   ├── admin/               # Admin endpoints
-│   │   ├── auth/                # Authentication
-│   │   ├── bootstrap/           # Initial data loading
-│   │   ├── jobs/                # BullMQ job queue
-│   │   │   ├── queue.ts        # Job scheduling
-│   │   │   └── worker.ts       # Job processing
-│   │   ├── pricing/             # Pricing logic
-│   │   ├── setup/               # System initialization
-│   │   ├── shared/              # Shared utilities
-│   │   └── sources/             # Data source management
-│   │       ├── service.ts      # Main source sync logic
-│   │       └── adapters/       # Source-specific adapters
-│   │           ├── autoxpressFeed.ts
-│   │           ├── autoxpressWeb.ts
-│   │           ├── carzoneWeb.ts
-│   │           └── carsIrelandWeb.ts
-│   │
-│   └── scrapers/                 # Web scraping implementations
-│       ├── autoxpress.ts        # AutoXpress inventory scraper
-│       ├── carzone.ts           # Carzone comparables scraper
-│       └── carsIreland.ts       # CarsIreland comparables scraper
+├── server/                       # Backend
+│   ├── index.ts                  # Express app, all routes, middleware
+│   ├── worker.ts                 # BullMQ worker entry point
+│   ├── config/
+│   │   ├── env.ts               # Environment variable parsing
+│   │   └── defaults.ts          # DEFAULT_USERS, normalization rules
+│   ├── lib/
+│   │   ├── prisma.ts            # Singleton Prisma client
+│   │   ├── redis.ts             # BullMQ + session Redis clients
+│   │   ├── browser.ts           # Playwright browser pool + retry logic
+│   │   ├── parse.ts             # parseCurrency, parseYear, slugify, etc.
+│   │   ├── auth.ts              # bcrypt helpers
+│   │   ├── http.ts              # HTTP error wrapper
+│   │   ├── matching.ts          # scoreComparable() algorithm
+│   │   └── session.ts           # express-session middleware
+│   └── modules/
+│       ├── auth/service.ts      # loginWithPassword, logout, getCurrentUser
+│       ├── bootstrap/service.ts # getBootstrapData() — main data aggregator
+│       ├── pricing/service.ts   # createPricingDecision, toggleExclusion
+│       ├── admin/service.ts     # Admin queries
+│       ├── setup/service.ts     # DB seeding
+│       ├── jobs/
+│       │   ├── queue.ts         # BullMQ queue + recurring job registration
+│       │   └── worker.ts        # Job processors
+│       ├── sources/
+│       │   ├── service.ts       # Sync orchestration (sequential)
+│       │   ├── service-parallel.ts  # Parallel competitor scraping (used in prod)
+│       │   └── adapters/        # Source-specific wrappers
+│       └── shared/mappers.ts    # DTOs: toVehicleDto, toComparableListingDto
+│
+├── server/scrapers/              # Playwright scraper implementations
+│   ├── autoxpress.ts            # Two-pass: list pages → detail pages
+│   ├── carzone.ts               # Search + scrape comparables
+│   └── carsIreland.ts           # Search + scrape comparables (with bug fixes)
 │
 ├── prisma/
-│   ├── schema.prisma            # Database schema definition
-│   └── seed.ts                  # Database seeding script
+│   ├── schema.prisma            # 14-table database schema
+│   └── seed.ts                  # Default dealership, users, sources
 │
-├── dist/                        # Frontend build output
-├── dist-server/                 # Backend build output
-├── node_modules/                # Dependencies
-│
-├── .env                         # Environment variables (local)
-├── .env.example                 # Environment template
-├── docker-compose.yml           # Local development services
-├── package.json                 # Dependencies and scripts
-├── tsconfig.json                # TypeScript config (frontend)
-├── tsconfig.server.json         # TypeScript config (backend)
-├── vite.config.ts               # Vite bundler config
-├── railway.json                 # Railway deployment config
-├── nixpacks.toml                # Railway build config
-├── Procfile                     # Service definitions
-├── DEPLOYMENT.md                # Deployment instructions
-└── README.md                    # Project documentation
+└── Config files
+    ├── package.json             # Scripts and dependencies
+    ├── docker-compose.yml       # PostgreSQL:16 + Redis:7
+    ├── vite.config.ts           # Dev proxy: /api → :8000
+    ├── tsconfig.json            # Frontend TS (target: ES2020)
+    ├── tsconfig.server.json     # Backend TS (target: ES2022, NodeNext)
+    ├── railway.json             # Railway deployment
+    └── Procfile                 # web + worker service definitions
 ```
 
 ---
 
-## 💾 Database Schema
+## Database Schema (14 Tables)
 
-### Core Entities
+```
+Dealership          → id, name, slug
+User                → id, dealershipId, name, email, role, passwordHash
+SessionRecord       → id, sid, userId, expiresAt
+InventorySource     → id, dealershipId, source, mode, enabled, priority
+SourceRun           → id, dealershipId, source, mode, status, startedAt, completedAt, recordsProcessed
+Vehicle             → id, dealershipId, make, model, variant, year, mileageKm, fuel,
+                      transmission, bodyType, engineLitres, colour, price, status,
+                      dateAdded, location, vehicleUrl, imageUrl
+VehicleSnapshot     → id, vehicleId, price, mileageKm, status, capturedAt
+RawListing          → id, source, kind (INVENTORY|COMPARABLE), payloadJson, htmlSnapshot
+NormalizedListing   → id, source, make, model, year, mileageKm, fuel, transmission,
+                      price, dealerName, dealerLocation, daysListed
+VehicleMatch        → id, vehicleId, normalizedListingId, score, confidence, included, manuallyExcluded
+ExcludedComparable  → id, vehicleId, normalizedListingId, userId
+PricingRecommendation → id, vehicleId, comparableCount, marketMin/Max/Median/Average,
+                        suggestedFloor/Target/Ceiling, currentPosition, deltaToTargetPct
+PricingDecision     → id, vehicleId, userId, targetPrice, note, type (ACCEPTED|MANUAL), decidedAt
+PricingFile         → id, vehicleId, userId, recommendationTarget, finalTarget, note
+NormalizationRule   → id, dictionary, sourceValue, canonicalValue
+```
 
-**Dealership** - Multi-tenant support (future SaaS)
-- `id`, `name`, `slug`, timestamps
-
-**User** - Authentication and authorization
-- `id`, `dealershipId`, `name`, `email`, `role`, `passwordHash`
-- Roles: `ADMIN`, `PRICING_MANAGER`
-
-**InventorySource** - Source configuration
-- `id`, `dealershipId`, `source`, `mode`, `enabled`, `priority`
-- Sources: `AUTOXPRESS`, `CARZONE`, `CARSIRELAND`
-- Modes: `FEED`, `SCRAPE`, `CSV`
-
-**Vehicle** - AutoXpress inventory
-- `id`, `dealershipId`, `stockId`, `registration`, `vinFragment`
-- `make`, `model`, `variant`, `year`, `mileageKm`
-- `fuel`, `transmission`, `bodyType`, `engineLitres`
-- `colour`, `price`, `status`, `dateAdded`
-- `location`, `vehicleUrl`, `imageUrl`
-
-**RawListing** - Scraped data (raw capture)
-- `id`, `dealershipId`, `sourceRunId`, `source`, `kind`
-- `externalId`, `listingUrl`, `payloadJson`, `htmlSnapshot`
-
-**NormalizedListing** - Cleaned competitor data
-- `id`, `dealershipId`, `source`, `externalId`
-- `title`, `make`, `model`, `variant`, `year`
-- `mileageKm`, `fuel`, `transmission`, `bodyType`
-- `price`, `dealerName`, `dealerLocation`
-- `listedAt`, `daysListed`, `imageUrl`
-
-**VehicleMatch** - Vehicle-to-comparable links
-- `id`, `dealershipId`, `vehicleId`, `normalizedListingId`
-- `score`, `confidence`, `explanationJson`
-- `included`, `manuallyExcluded`
-
-**PricingRecommendation** - Calculated pricing
-- `id`, `dealershipId`, `vehicleId`, `comparableCount`
-- `marketMin`, `marketMax`, `marketMedian`, `marketAverage`
-- `suggestedFloor`, `suggestedTarget`, `suggestedCeiling`
-- `currentPosition`, `deltaToTargetPct`, `reasoningJson`
-
-**PricingDecision** - User decisions
-- `id`, `dealershipId`, `vehicleId`, `userId`
-- `targetPrice`, `note`, `type`, `decidedAt`
-
-**PricingFile** - Exportable pricing records
-- `id`, `dealershipId`, `vehicleId`, `userId`
-- `recommendationTarget`, `finalTarget`, `note`
-
-**SourceRun** - Job execution tracking
-- `id`, `dealershipId`, `source`, `mode`, `status`
-- `startedAt`, `completedAt`, `recordsProcessed`, `message`
+**Enum values:**
+- `Vehicle.status`: `ACTIVE | SOLD | INCOMING`
+- `VehicleMatch.confidence`: `HIGH | MEDIUM | LOW`
+- `PricingDecision.type`: `ACCEPTED | MANUAL`
+- `InventorySource.source`: `AUTOXPRESS | CARZONE | CARSIRELAND`
+- `InventorySource.mode`: `FEED | SCRAPE | CSV`
 
 ---
 
-## 🔄 Data Flow
+## API Routes
 
-### 1. Inventory Ingestion (AutoXpress)
-
-```
-┌─────────────────┐
-│ Scrape Website  │ (Playwright)
-│ autoxpress.ie   │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│  Raw Listing    │ (Store HTML/JSON)
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│ Parse & Extract │ (Make, Model, Price, etc.)
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│  Vehicle Table  │ (Upsert - update existing or create new)
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│ Vehicle Snapshot│ (Historical price/mileage tracking)
-└─────────────────┘
-```
-
-### 2. Competitor Data Collection
+All routes require authentication (session cookie) except login.
 
 ```
-For each AutoXpress vehicle:
-  ┌────────────────────────────┐
-  │ Build search query         │
-  │ (Make + Model)             │
-  └─────────────┬──────────────┘
-                │
-                ▼
-  ┌────────────────────────────┐
-  │ Scrape Carzone             │ (Playwright - max N results)
-  └─────────────┬──────────────┘
-                │
-                ▼
-  ┌────────────────────────────┐
-  │ Scrape CarsIreland         │ (Playwright - max N results)
-  └─────────────┬──────────────┘
-                │
-                ▼
-  ┌────────────────────────────┐
-  │ Store Raw Listings         │
-  └─────────────┬──────────────┘
-                │
-                ▼
-  ┌────────────────────────────┐
-  │ Normalize Data             │ (Clean make/model/fuel/transmission)
-  └─────────────┬──────────────┘
-                │
-                ▼
-  ┌────────────────────────────┐
-  │ Score Match Confidence     │ (Algorithm: make, model, year, mileage, etc.)
-  └─────────────┬──────────────┘
-                │
-                ▼
-  ┌────────────────────────────┐
-  │ Create VehicleMatch        │ (Link vehicle ↔ comparable)
-  └────────────────────────────┘
+POST   /api/auth/login                   loginWithPassword()
+POST   /api/auth/logout                  logout()
+GET    /api/auth/me                      getCurrentUser()
+
+GET    /api/bootstrap                    getBootstrapData() ← primary data endpoint
+GET    /api/dashboard                    Dashboard stats summary
+GET    /api/vehicles                     All vehicles list
+GET    /api/vehicles/:id                 Single vehicle detail
+GET    /api/vehicles/:id/comparables     Comparables for vehicle
+GET    /api/vehicles/:id/pricing         Pricing recommendation
+POST   /api/vehicles/:id/decision        Create pricing decision
+POST   /api/vehicles/:id/exclusions      Toggle comparable exclusion
+
+GET    /api/pricing-files                List pricing files
+POST   /api/pricing-files               Generate pricing file
+
+GET    /api/admin/jobs                   Job run history
+GET    /api/admin/sources               Source health status
+GET    /api/admin/imports               Import statuses
+POST   /api/admin/refresh               Trigger scraping { source: 'all'|'autoxpress'|'carzone'|'carsireland' }
+
+GET    /api/health                       Health check
+GET    /                                 Serves frontend (dist/index.html)
 ```
 
-### 3. Matching Algorithm
+---
 
-**Scoring Logic** (`server/lib/matching.ts`):
+## Frontend Data Flow
 
-```typescript
-Score =
-  + 100 points if make matches exactly
-  + 100 points if model matches exactly
-  +  50 points for variant keyword overlap
-  +  variable points based on year difference (closer = better)
-  +  variable points based on mileage difference (closer = better)
-  +  20 points if fuel matches
-  +  20 points if transmission matches
-  +  10 points if body type matches
-  +  variable points for engine size similarity
+### Bootstrap (on login)
+```
+POST /api/auth/login
+  → Creates session, returns AppUser
+GET /api/bootstrap
+  → Returns ALL data: vehicles, comparables, matches, decisions,
+    exclusions, pricingFiles, users, jobRuns, sourceHealth, normRules
+  → AppStateProvider populates global context
+  → All pages render from this in-memory state
+```
+
+### Pricing Decision
+```
+POST /api/vehicles/:id/decision { targetPrice, note, type }
+  → Creates PricingDecision record
+GET /api/bootstrap  ← refetch
+  → Global state updates, all pages re-render
+```
+
+### Manual Scrape Trigger
+```
+POST /api/admin/refresh { source: 'all' }
+  → [If Redis] Enqueues BullMQ job → worker processes async
+  → [If no Redis] Runs synchronously (slow but works)
+  → scrapeAutoXpress → scrapeCarzone → scrapeCarsIreland
+  → Creates VehicleMatches, PricingRecommendations
+GET /api/bootstrap ← refetch
+```
+
+---
+
+## Core Algorithms
+
+### Matching Algorithm (`server/lib/matching.ts`)
+
+```
+Score per comparable:
+  +28   make matches
+  +28   model matches
+  +16   year exact, scaling down to 0 for 4+ year diff
+  +12   mileage within 15k km
+  + 6   mileage within 40k km
+  + 8   fuel matches
+  + 6   transmission matches
+  + 4   body type matches
+  + 3   per variant keyword match (max 8)
+  + 6   price within 12%
 
 Confidence:
-  - HIGH:   score >= 200
-  - MEDIUM: score >= 100
-  - LOW:    score < 100
+  HIGH   → score ≥ 72
+  MEDIUM → score ≥ 52
+  LOW    → score < 52
 ```
 
-### 4. Pricing Recommendation
-
-**Algorithm** (`server/modules/pricing/service.ts`):
+### Pricing Algorithm (`src/utils/pricing.ts`)
 
 ```
-1. Get all HIGH and MEDIUM confidence matches
-2. Remove manual exclusions
-3. Calculate statistics:
-   - Market min/max/median/average
-   - Similar mileage median
-   - Similar year median
-4. Apply adjustments:
-   - Mileage premium/discount
-   - Year premium/discount
-5. Set target price range:
-   - Floor: Market median - 5%
-   - Target: Market median
-   - Ceiling: Market median + 5%
-6. Determine position:
-   - Below market: Current price < target - 3%
-   - In market: Within ±3% of target
-   - Above market: Current price > target + 3%
+1. Filter: Keep only HIGH + MEDIUM confidence matches
+2. Remove manually excluded comparables
+3. Filter outliers: price ±18%, mileage ±80k km, year ±3
+4. Apply weighted adjustments per comparable:
+   - Mileage:  +€35 per 1,000 km difference
+   - Year:     +€420 per year newer
+   - Age:      -€120 if listed > 30 days
+5. Confidence weight: HIGH=1.0, MEDIUM=0.65
+6. Calculate weighted market stats (min/max/median/average)
+7. Target = weighted median
+8. Floor  = target - €750
+9. Ceiling = target + €900
+
+Position determination:
+  BELOW  → current price < target - 3%
+  IN     → within ±3% of target
+  ABOVE  → current price > target + 3%
+```
+
+### Attention Score (`src/utils/vehicleAnalysis.ts`)
+
+Used to prioritise which vehicles need review:
+
+```
++35  price is ABOVE market
++10  price is BELOW market
++30  comparables are stale (not today or yesterday)
++15  comparables from yesterday only
++20  fewer than 3 comparables
++ 8  fewer than 5 comparables
++12  no pricing decision made
+
+Needs review if: attentionScore ≥ 20 OR no decision
 ```
 
 ---
 
-## 🕷️ Scraping Implementation
+## Scraping Implementation
 
-### Current Strategy
+### AutoXpress (Two-Pass)
+- **URL:** `https://www.autoxpress.ie/search`
+- **Pass 1:** Paginate through all listing pages, collect vehicle URLs + basic data
+- **Pass 2:** Visit each vehicle detail page for colour, registration, full specs
+- **Critical fix:** Uses string-based `page.evaluate()` (not function serialization) to avoid tsx `__name` transpilation error
 
-**What Gets Scraped:**
+### Carzone
+- **URL:** `https://www.carzone.ie/used-cars/{make}/{model}`
+- Searches per vehicle, extracts top N comparables
+- Returns: title, year, mileage, fuel, transmission, price, dealer, location
 
-1. **AutoXpress Inventory** (Own Stock):
-   - Source: `https://www.autoxpress.ie/search`
-   - Frequency: Every 4-6 hours (configurable)
-   - Data: Make, Model, Variant, Year, Mileage, Fuel, Transmission, Body Type, Engine, Price, Location, Images
-   - Strategy: Scrape ALL in-stock vehicles, save to database with historical snapshots
+### CarsIreland
+- **URL:** `https://www.carsireland.ie/used-cars/{make}/{model}`
+- **Bug fix 1:** Price parsing - extract first text node only (prevents "€14,950 Per Month" → €14,950,503)
+- **Bug fix 2:** Fuel/transmission - pattern match in variant text (TDI→Diesel, TSI→Petrol, PHEV→Hybrid, automatic/DSG/S-tronic detection)
 
-2. **Carzone Comparables** (Competitor):
-   - Source: `https://www.carzone.ie/used-cars/{make}/{model}`
-   - Frequency: After AutoXpress inventory sync
-   - Data: Similar to above + dealer name/location, listing age
-   - Strategy: For EACH AutoXpress vehicle, search and get top N similar vehicles
+### Parallel Scraping (`service-parallel.ts`)
+- Promise.allSettled batching: 2 vehicles concurrently
+- Reduces 82 hours (sequential) to ~110 minutes
+- Batch size of 2 to minimize database deadlocks (~4%)
 
-3. **CarsIreland Comparables** (Competitor):
-   - Source: `https://www.carsireland.ie/used-cars/{make}/{model}`
-   - Frequency: After AutoXpress inventory sync
-   - Data: Similar to above
-   - Strategy: For EACH AutoXpress vehicle, search and get top N similar vehicles
+### Playwright Configuration
+- Headless Chromium
+- User agent: Chrome 126 on macOS (anti-bot)
+- Viewport: 1440x1200
+- Retry: 3x on transient network errors (ERR_NETWORK_CHANGED, ERR_CONNECTION_RESET, etc.)
+- `withBrowserContext(fn)` wrapper in `server/lib/browser.ts`
 
-### Scraping Configuration
+---
 
-**Environment Variables** (`.env`):
+## Authentication & Sessions
+
+### Modes
+- **Demo mode** (`DEMO_MODE=true`): Hardcoded users, no DB writes, read-only
+- **Live mode** (`DEMO_MODE=false`): Bcrypt verification, SessionRecord in DB
+
+### Default Users (after seeding)
+| Email | Password | Role |
+|---|---|---|
+| `admin@autoxpress.ie` | `autoxpress` | ADMIN |
+| `pricing@autoxpress.ie` | `autoxpress` | PRICING_MANAGER |
+
+### Session Storage
+- Redis if `REDIS_URL` configured
+- In-memory fallback if no Redis (sessions lost on restart)
+
+---
+
+## Environment Variables
+
 ```env
-SCRAPE_MAX_VEHICLES=500              # Max vehicles from AutoXpress
-SCRAPE_MAX_AUTOXPRESS_PAGES=20       # Max pages to scrape
-SCRAPE_MAX_COMPARABLES_PER_SOURCE=15 # Max comparables per competitor site
-```
+# Core
+NODE_ENV=development
+PORT=8000
+SESSION_SECRET=your-secret-here
+DEMO_MODE=false
 
-**For Testing:**
-```env
+# Database
+DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/autoxpress
+
+# Redis
+REDIS_URL=redis://127.0.0.1:6379
+
+# Scraping (testing)
 SCRAPE_MAX_VEHICLES=8
 SCRAPE_MAX_AUTOXPRESS_PAGES=2
 SCRAPE_MAX_COMPARABLES_PER_SOURCE=4
+
+# Scraping (production)
+SCRAPE_MAX_VEHICLES=500
+SCRAPE_MAX_AUTOXPRESS_PAGES=50
+SCRAPE_MAX_COMPARABLES_PER_SOURCE=15
+
+# Optional
+AUTOXPRESS_FEED_URL=
+BOOTSTRAP_CACHE_TTL_MS=300000
 ```
-
-**For Production:**
-```env
-SCRAPE_MAX_VEHICLES=500              # Scrape all vehicles (400+ expected)
-SCRAPE_MAX_AUTOXPRESS_PAGES=20       # Cover all pages
-SCRAPE_MAX_COMPARABLES_PER_SOURCE=15 # Get sufficient comparables for accurate pricing
-```
-
-### Scraping Details Captured
-
-**Critical for Pricing:**
-1. ✅ Make (exact match required)
-2. ✅ Model (exact match required)
-3. ✅ Year (±2 years acceptable)
-4. ✅ Mileage (for adjustment calculations)
-5. ✅ Fuel type (Petrol/Diesel/Hybrid - affects value)
-6. ✅ Transmission (Auto/Manual - affects value)
-7. ✅ Price (the key metric!)
-
-**Nice to Have:**
-8. ✅ Variant/Trim (for better matching)
-9. ✅ Body type (Saloon/SUV/Hatchback)
-10. ✅ Engine size (1.0L, 2.0L, etc.)
-11. ✅ Location (dealer proximity)
-12. ✅ Listing age (how long on market)
-13. ✅ Images (for verification)
-
-### Why Playwright Works Well
-
-1. ✅ **Handles JavaScript-rendered sites** (Carzone, CarsIreland use dynamic content)
-2. ✅ **Built-in anti-detection** (Looks like a real browser)
-3. ✅ **Reliable selectors** (Can wait for elements, retry on failure)
-4. ✅ **Fast** (Headless Chrome is optimized)
-5. ✅ **No API costs** (Free and runs locally)
-
-### Scraping Challenges Solved
-
-**Challenge: TypeScript/tsx transpilation issue with `page.evaluate()`**
-- **Problem:** tsx adds `__name` helper that doesn't exist in browser context
-- **Solution:** Use string-based evaluation instead of function serialization
-- **Result:** ✅ Working perfectly
-
-**Challenge: Dynamic content loading**
-- **Solution:** Playwright's `waitForSelector()` ensures content is loaded
-- **Result:** ✅ Reliable scraping
-
-**Challenge: Rate limiting / anti-bot**
-- **Solution:**
-  - Use realistic user agents
-  - Add delays between requests
-  - Playwright naturally looks like a real browser
-- **Result:** ✅ No blocking issues so far
 
 ---
 
-## 🎛️ Manual Scraping Trigger
+## Local Development
 
-**Already Implemented!**
+### Prerequisites
+- Node.js 20+
+- Docker + Docker Compose
 
-### API Endpoint
-
-```
-POST /api/admin/refresh
-Content-Type: application/json
-
-Body:
-{
-  "source": "all" | "autoxpress" | "carzone" | "carsireland"
-}
-```
-
-**Examples:**
+### Setup
 ```bash
-# Scrape everything
-curl -X POST http://localhost:8000/api/admin/refresh \
-  -H "Content-Type: application/json" \
-  -d '{"source":"all"}'
+git clone https://github.com/Umaraslam66/autoexpress.git
+cd autoexpress
+npm install
 
-# Scrape only AutoXpress inventory
-curl -X POST http://localhost:8000/api/admin/refresh \
-  -H "Content-Type: application/json" \
-  -d '{"source":"autoxpress"}'
+cp .env.example .env
+# Edit .env if needed
 
-# Scrape only Carzone comparables
-curl -X POST http://localhost:8000/api/admin/refresh \
-  -H "Content-Type: application/json" \
-  -d '{"source":"carzone"}'
+docker-compose up -d        # Start PostgreSQL + Redis
+npm run db:generate         # Generate Prisma client
+npm run db:push             # Create tables
+npm run db:seed             # Seed default data
 ```
 
-### How It Works
+### Running
+```bash
+# Terminal 1 - Backend API
+DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:5432/autoxpress" \
+REDIS_URL="redis://127.0.0.1:6379" \
+npm run dev:server
 
-1. User clicks "Refresh Data" button in Admin panel
-2. Frontend sends POST to `/api/admin/refresh`
-3. Backend either:
-   - **Option A (if Redis available):** Enqueues job in BullMQ → Worker processes → Returns job ID
-   - **Option B (if no Redis):** Runs scraping synchronously → Returns results
-4. Scraping happens:
-   - AutoXpress → 500 vehicles (or whatever limit is set)
-   - For each vehicle → Search Carzone (max 15 results)
-   - For each vehicle → Search CarsIreland (max 15 results)
-   - Match all comparables → Calculate pricing
-5. Data appears in dashboard immediately
+# Terminal 2 - Background Worker
+DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:5432/autoxpress" \
+REDIS_URL="redis://127.0.0.1:6379" \
+npm run dev:worker
 
-### Frontend Button (To Be Added)
-
-Location: Admin page or Dashboard
-
-```tsx
-<button onClick={handleRefreshAll}>
-  🔄 Refresh All Data
-</button>
-
-const handleRefreshAll = async () => {
-  const response = await fetch('/api/admin/refresh', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ source: 'all' })
-  });
-  // Show success message
-};
+# Terminal 3 - Frontend
+npm run dev
 ```
 
----
-
-## 📅 Recommended Scraping Schedule
-
-### Automated Schedule (Background Worker)
-
-**Already Configured in Code:**
-
-1. **AutoXpress Inventory:**
-   - **Frequency:** Every 4-6 hours
-   - **Reason:** Catch new arrivals, sold vehicles, price changes
-   - **Impact:** Low (same vehicles, just updates)
-
-2. **Competitor Comparables:**
-   - **Frequency:** Every 12 hours (or after AutoXpress sync)
-   - **Reason:** Market prices don't change hourly
-   - **Impact:** Medium (searches for each vehicle)
-
-3. **Full Refresh:**
-   - **Frequency:** Twice daily (morning & evening)
-   - **Reason:** Keep pricing recommendations fresh
-   - **Impact:** High (complete scraping cycle)
-
-### Manual Triggers
-
-**When to Use:**
-- New stock arrives (user knows about it)
-- Before pricing review session
-- After competitor analysis request
-- On-demand for specific vehicles
-
----
-
-## 🔐 Authentication & Users
-
-### Default Users (After Seeding)
-
-**Admin:**
-- Email: `admin@autoxpress.ie`
-- Password: `autoxpress`
-- Permissions: Full access to all features
-
-**Pricing Manager:**
-- Email: `pricing@autoxpress.ie`
-- Password: `autoxpress`
-- Permissions: Pricing decisions, vehicle management
-
-### Roles
-
-1. **ADMIN**
-   - User management
-   - Source configuration
-   - System settings
-   - Job monitoring
-   - All pricing manager permissions
-
-2. **PRICING_MANAGER**
-   - View vehicles and pricing
-   - Create pricing decisions
-   - Export pricing files
-   - View comparables
-   - Add notes
-
----
-
-## 🚀 API Endpoints
-
-### Authentication
-- `POST /api/auth/login` - User login
-- `POST /api/auth/logout` - User logout
-- `GET /api/auth/me` - Current user
-
-### Vehicles
-- `GET /api/vehicles` - List all vehicles
-- `GET /api/vehicles/:id` - Vehicle detail with pricing
-- `GET /api/vehicles/:id/comparables` - Comparables for vehicle
-- `GET /api/vehicles/:id/pricing` - Pricing recommendation
-
-### Pricing Decisions
-- `POST /api/vehicles/:id/decision` - Create pricing decision
-- `POST /api/vehicles/:id/exclusions` - Toggle comparable exclusion
-- `GET /api/pricing-files` - List pricing files
-- `POST /api/pricing-files` - Generate pricing file
-
-### Admin
-- `GET /api/admin/jobs` - Job run history
-- `GET /api/admin/sources` - Source health status
-- `GET /api/admin/imports` - Import statuses
-- `POST /api/admin/refresh` - Trigger scraping
-
-### System
-- `GET /api/health` - System health check
-- `GET /api/bootstrap` - Initial app data
-- `GET /api/dashboard` - Dashboard statistics
-
----
-
-## 🎨 Frontend Features
-
-### Dashboard
-- Total vehicles count
-- Vehicles with sufficient comparables
-- Vehicles needing review
-- Above market / Below market counts
-- Average days in stock
-- Recent price changes
-- Source health indicators
-
-### Inventory List
-- Filterable table
-- Sort by make, model, price, date
-- Search functionality
-- Quick pricing status view
-- Bulk actions (planned)
-
-### Vehicle Detail Page
-- Vehicle information card
-- Current pricing vs. recommendation
-- Competitor comparables table
-- Match confidence scores
-- Pricing decision history
-- Notes and comments
-- Export pricing file button
-
-### Admin Panel
-- Source configuration
-- Job run history
-- Import status monitoring
-- Manual scraping triggers
-- User management
-
----
-
-## 🔧 Development
-
-### Local Setup
-
-1. **Prerequisites:**
-   ```bash
-   Node.js 20+
-   Docker & Docker Compose
-   Git
-   ```
-
-2. **Clone & Install:**
-   ```bash
-   git clone https://github.com/Umaraslam66/autoexpress.git
-   cd autoexpress
-   npm install
-   ```
-
-3. **Environment:**
-   ```bash
-   cp .env.example .env
-   # Edit .env with your settings
-   ```
-
-4. **Start Services:**
-   ```bash
-   docker-compose up -d  # Start PostgreSQL + Redis
-   npm run db:generate   # Generate Prisma client
-   npm run db:push       # Create database tables
-   npm run db:seed       # Seed default data
-   ```
-
-5. **Run Application:**
-   ```bash
-   # Terminal 1: Backend API
-   DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:5432/autoxpress" \
-   REDIS_URL="redis://127.0.0.1:6379" \
-   npm run dev:server
-
-   # Terminal 2: Background Worker
-   DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:5432/autoxpress" \
-   REDIS_URL="redis://127.0.0.1:6379" \
-   npm run dev:worker
-
-   # Terminal 3: Frontend
-   npm run dev
-   ```
-
-6. **Access:**
-   - Frontend: http://localhost:5173
-   - Backend: http://localhost:8000
-   - Login: `admin@autoxpress.ie` / `autoxpress`
+### Access
+- **Frontend:** http://localhost:5173
+- **Backend API:** http://localhost:8000
+- **Login:** `admin@autoxpress.ie` / `autoxpress`
 
 ### npm Scripts
-
-```json
-{
-  "dev": "vite",                          // Frontend dev server
-  "dev:server": "tsx watch server/index.ts",      // Backend API (hot reload)
-  "dev:worker": "tsx watch server/worker.ts",     // Background worker (hot reload)
-  "build": "...",                         // Build for production
-  "start": "node dist-server/index.js",   // Run production API
-  "start:server": "node dist-server/index.js",    // Production API
-  "start:worker": "node dist-server/worker.js",   // Production worker
-  "db:generate": "prisma generate",       // Generate Prisma client
-  "db:push": "prisma db push",            // Sync schema to database
-  "db:seed": "tsx prisma/seed.ts"         // Seed database
-}
+```bash
+npm run dev              # Vite frontend dev server
+npm run dev:server       # Backend API with hot reload (tsx watch)
+npm run dev:worker       # Background worker with hot reload
+npm run build            # Production build (TS compile + Vite + Playwright install)
+npm run start            # Run production API
+npm run start:worker     # Run production worker
+npm run db:generate      # prisma generate
+npm run db:push          # prisma db push
+npm run db:migrate       # prisma migrate deploy
+npm run db:seed          # tsx prisma/seed.ts
 ```
 
 ---
 
-## 🚢 Deployment (Railway)
+## Production (Railway)
 
-Detailed instructions in `DEPLOYMENT.md`
+### Services
+- **web** — Express API + static frontend
+- **worker** — Background job processor
+- **PostgreSQL** — Managed database
+- **Redis** — Job queue + sessions
 
-**Quick Deploy:**
-1. Push code to GitHub
-2. Create Railway project
-3. Add PostgreSQL + Redis services
-4. Add Worker service
-5. Set environment variables
-6. Deploy!
+### Deployment
+1. Push to GitHub
+2. Railway auto-deploys from `main` branch
+3. See `DEPLOYMENT.md` for full setup
 
-**Services Required:**
-- Main API (serves frontend + API)
-- Worker (background scraping)
-- PostgreSQL (database)
-- Redis (job queue)
-
----
-
-## ✅ What's Working
-
-1. ✅ **Scraping (Playwright)**
-   - AutoXpress inventory: ✓
-   - Carzone comparables: ✓
-   - CarsIreland comparables: ✓
-   - String-based evaluation fix: ✓
-
-2. ✅ **Data Pipeline**
-   - Raw data capture: ✓
-   - Data normalization: ✓
-   - Vehicle matching: ✓
-   - Pricing calculations: ✓
-   - Historical tracking: ✓
-
-3. ✅ **Backend**
-   - Express API: ✓
-   - Authentication: ✓
-   - Database (Prisma): ✓
-   - Background jobs (BullMQ): ✓
-   - Manual triggers: ✓
-
-4. ✅ **Frontend**
-   - React app: ✓
-   - Dashboard: ✓
-   - Vehicle list: ✓
-   - Vehicle detail: ✓
-   - Admin panel: ✓
-
-5. ✅ **Infrastructure**
-   - Docker Compose: ✓
-   - Railway config: ✓
-   - Environment management: ✓
-   - Build scripts: ✓
+### Railway Config
+- `railway.json` — Build config
+- `nixpacks.toml` — Nixpacks build settings
+- `Procfile` — `web: node dist-server/index.js` and `worker: node dist-server/worker.js`
 
 ---
 
-## 📝 TODO / Future Enhancements
+## Background Jobs (BullMQ)
+
+Queue name: `autoxpress-ingestion`
+
+### Job Types
+| Job | Schedule | What it does |
+|---|---|---|
+| `repeat-autoxpress` | Every 4 hours | Scrape AutoXpress inventory |
+| `repeat-carzone` | Every 12 hours | Scrape Carzone comparables |
+| `repeat-carsireland` | Every 12 hours | Scrape CarsIreland comparables |
+| `sync-all` | Manual trigger | All three scrapers + pricing recompute |
+| `sync-source` | Manual trigger | Single source scrape |
+
+Jobs are registered via `registerRecurringJobs()` called on worker startup.
+
+If Redis is unavailable, scraping falls back to synchronous execution in the API request.
+
+---
+
+## Known Issues & Fixes
+
+### Fixed
+- **Playwright tsx transpilation:** `page.evaluate()` uses string-based eval, not function serialization
+- **AutoXpress incomplete coverage:** Two-pass approach captures 100% of vehicles
+- **CarsIreland price corruption:** Extract first text node only
+- **CarsIreland missing fuel/transmission:** Pattern matching in variant text
+- **Sequential scraping (82h bottleneck):** Parallel batching → 110 minutes
+- **SourceRun healthStatus crash:** Removed non-existent field from schema
+
+### Active
+- Frontend not consistently using `config.ts` API_URL (most fetch calls are relative paths, which works via Vite proxy)
+- TypeScript build has some type errors (runtime unaffected)
+- DB deadlocks ~4% with parallel scraping (acceptable, handled by Promise.allSettled)
+- No frontend loading indicators during scraping operations
+
+---
+
+## Current Production Metrics (March 9, 2026)
+
+```
+Vehicles Scraped:        489 / 489 (100%)
+Competitor Listings:     2,159 (874 Carzone + 1,285 CarsIreland)
+Vehicle Matches:         10,507
+Pricing Recommendations: 1,467
+Data Coverage:           100%
+```
+
+---
+
+## TODO / Roadmap
 
 ### MVP Completion
-- [ ] Add manual refresh button to frontend Admin page
-- [ ] Improve frontend API integration (use config.ts)
-- [ ] Add loading states for scraping operations
-- [ ] Add toast notifications for user actions
-- [ ] CSV export functionality
+- [ ] Frontend loading states during scraping
+- [ ] Toast notifications for user actions
+- [ ] CSV export for pricing files
+- [ ] Consistent use of `config.ts` API_URL across frontend
 
-### Phase 2 Features
-- [ ] Scheduled scraping (cron jobs)
-- [ ] Email notifications for pricing alerts
+### Phase 2
+- [ ] Scheduled scraping (cron UI)
+- [ ] Email alerts for pricing anomalies
 - [ ] PDF pricing reports
-- [ ] Advanced filtering and search
 - [ ] Bulk pricing decisions
 - [ ] Price history charts
 - [ ] Competitor tracking dashboard
 
-### Technical Improvements
-- [ ] Add Redis caching layer
-- [ ] Implement rate limiting on scrapers
-- [ ] Add Sentry for error tracking
-- [ ] Set up CI/CD pipeline
-- [ ] Add integration tests
-- [ ] Performance monitoring
-- [ ] Database backups
+### Technical
+- [ ] Redis caching layer
+- [ ] Sentry error tracking
+- [ ] CI/CD pipeline
+- [ ] Integration tests
+- [ ] DB backups
 
-### Business Features
-- [ ] Multi-dealer tenancy
+### Business
+- [ ] Multi-dealer tenancy (schema already supports it via dealershipId)
 - [ ] Custom pricing rules engine
 - [ ] Automated repricing
-- [ ] Market trend analysis
-- [ ] Inventory forecasting
-- [ ] Integration with dealer management systems
+- [ ] DMS integration
 
 ---
 
-## 🐛 Known Issues
+## Key Decisions & Rationale
 
-### Fixed
-- ✅ Playwright tsx transpilation issue (string-based eval)
-- ✅ Environment variable loading in tsx
-- ✅ Docker container networking
-- ✅ AutoXpress scraper incomplete vehicle coverage (fixed: two-pass approach)
-- ✅ CarsIreland price parsing corruption (fixed: first text node extraction)
-- ✅ CarsIreland missing fuel/transmission (fixed: pattern matching)
-- ✅ Sequential scraping performance bottleneck (fixed: parallel processing)
-- ✅ SourceRun healthStatus schema mismatch (fixed: removed field)
-
-### Active
-- ⚠️ Frontend not yet using API_URL from config.ts (needs update)
-- ⚠️ No frontend loading indicators during scraping
-- ⚠️ TypeScript build has some type errors (doesn't affect runtime)
-- ⚠️ Database deadlocks occur occasionally (~4%) with parallel scraping (acceptable)
+| Decision | Rationale |
+|---|---|
+| Playwright over Firecrawl | Free, full control, working perfectly with string-eval fix |
+| Bootstrap pattern (single API call) | Simpler than multiple endpoints, fast enough at current scale |
+| Store all raw scraped data | Full audit trail, can re-parse without re-scraping |
+| Two competitor sites only | Carzone + CarsIreland cover majority of Irish used car market |
+| Confidence weighting (HIGH/MEDIUM only) | Low confidence matches distort pricing |
+| Parallel batch size = 2 | Balance between speed and DB deadlock rate |
+| dealershipId everywhere | Future SaaS multi-tenancy ready from day one |
 
 ---
-
-## 📚 Key Learnings & Decisions
-
-### Why Playwright Over Firecrawl?
-✅ **Working perfectly** with string-based evaluation fix
-✅ **Free** (no API costs)
-✅ **Fast** (processes pages in seconds)
-✅ **Full control** over scraping logic
-❌ Firecrawl would cost money and require rewriting working code
-
-### Scraping Strategy Chosen
-✅ **Save everything** in database with historical snapshots
-✅ **Scrape AutoXpress** periodically (every 4-6 hours)
-✅ **Search competitors** for each vehicle in inventory
-✅ **Match intelligently** using scoring algorithm
-✅ **Allow manual triggers** for user control
-
-### Data That Matters for Pricing
-1. **Critical:** Make, Model, Year, Mileage, Fuel, Transmission, Price
-2. **Important:** Variant, Body Type, Engine Size
-3. **Nice to Have:** Location, Listing Age, Images
-
-### Two Competitor Sites is Sufficient
-✅ Carzone + CarsIreland cover majority of Irish used car market
-✅ More sites = slower scraping without proportional benefit
-✅ Can add more later if needed
-
----
-
-## ✅ Current Production Status
-
-**Last Scrape:** March 9, 2026
-**Environment:** Development (Local)
-
-### Live Data Metrics
-```
-✅ Vehicles Scraped:           489 (100% of inventory)
-✅ Competitor Listings:        2,159 (874 Carzone + 1,285 CarsIreland)
-✅ Vehicle Matches:            10,507
-✅ Pricing Recommendations:    1,467
-✅ Coverage:                   100% (all vehicles have pricing)
-```
-
-### Services Status
-- ✅ API Server: Running (http://127.0.0.1:8000)
-- ✅ Frontend: Running (http://127.0.0.1:5173)
-- ✅ PostgreSQL: Running
-- ✅ Redis: Running
-- ✅ Worker: Running
-- ✅ Scrapers: All 3 operational (AutoXpress, Carzone, CarsIreland)
-
-### Recent Fixes & Improvements
-
-**Complete Scraper Overhaul (March 8-9, 2026)**
-
-1. **AutoXpress Scraper - Complete Vehicle Coverage**
-   - **Issue:** Only capturing 239/489 vehicles (49%)
-   - **Root Cause:** Page limit set to 20, only scraped 20 pages × 12 = 240 vehicles
-   - **Solution:**
-     - Increased page limit to 50 in `.env`
-     - Implemented two-pass scraping approach
-     - Pass 1: Collect all vehicle listings from all pages
-     - Pass 2: Visit each detail page to extract colour data
-   - **Result:** 489/489 vehicles with 100% colour coverage
-
-2. **CarsIreland Scraper - Critical Bug Fixes**
-   - **Issue 1:** Price parsing catastrophically wrong (€23,950 became €23,950,503)
-   - **Cause:** Selector returning "€14,950 €279 Per Month" and parser concatenating all digits
-   - **Solution:** Extract first text node only from pricing element
-   - **Issue 2:** Missing fuel type and transmission data
-   - **Solution:** Added intelligent pattern matching in variant text
-     - Fuel: TDI→Diesel, TSI→Petrol, PHEV→Hybrid, EV→Electric
-     - Transmission: automatic, manual, DSG, S-tronic detection
-   - **Result:** Accurate prices and improved match scores (74→93)
-
-3. **Parallel Competitor Scraping - 240x Performance Improvement**
-   - **Issue:** Sequential scraping would take 82 hours
-   - **Solution:** Created `service-parallel.ts` with Promise.allSettled batching
-   - **Batch size:** 2 vehicles concurrently (minimizes database deadlocks)
-   - **Result:** Completed in 110 minutes vs 82 hours (240x faster)
-   - **Added files:**
-     - `server/modules/sources/service-parallel.ts`
-     - `run-competitor-scraping-parallel.ts` (recommended)
-     - `run-competitor-scraping.ts` (sequential fallback)
-     - `trigger-competitors-only.sh`
-
-4. **Schema Fix - SourceRun Model**
-   - **Issue:** Parallel scraper crashing with "Unknown argument 'healthStatus'"
-   - **Cause:** Code referencing non-existent field in SourceRun table
-   - **Solution:** Removed healthStatus field from all update statements
-   - **Result:** Stable scraping with no crashes
-
-**Production Environment Variables**
-```env
-SCRAPE_MAX_VEHICLES=500
-SCRAPE_MAX_AUTOXPRESS_PAGES=20
-SCRAPE_MAX_COMPARABLES_PER_SOURCE=15
-```
-
-### Deployment Readiness
-- ✅ Railway configuration files created
-- ✅ Production environment variables documented
-- ✅ Database schema deployed and tested
-- ✅ Playwright installation scripted
-- ✅ Worker service configured
-- 📦 Ready for Railway deployment (see `DEPLOYMENT.md`)
-
----
-
-## 🔮 Future SaaS Readiness
-
-The architecture is designed for multi-tenancy:
-- ✅ All data includes `dealershipId`
-- ✅ User roles are tenant-scoped
-- ✅ Source configurations are per-dealer
-- ✅ Can add subscription/billing later
-- ✅ Isolated data per customer
-
----
-
-## 📞 Support & Contact
 
 **Repository:** https://github.com/Umaraslam66/autoexpress
-**Documentation:** See `DEPLOYMENT.md`, `PRD.md`
-**Claude Session:** This document was generated from development session
-
----
-
-## 📄 License
-
-Private/Proprietary - Client: AutoXpress Ireland
-
----
-
-**Last Updated:** March 9, 2026
+**Last Updated:** March 12, 2026
 **Version:** 1.1.0
-**Status:** Production Ready - All Scrapers Operational, 100% Data Coverage
