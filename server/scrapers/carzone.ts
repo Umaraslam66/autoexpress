@@ -17,7 +17,9 @@ export async function scrapeCarzoneComparables(vehicle: Vehicle, options: Search
 
     const selectorFound = await page.waitForSelector('.stock-summary', { timeout: 60000 }).then(() => true).catch(() => false);
     if (!selectorFound) {
-      console.warn(`[Carzone] Selector '.stock-summary' not found for ${searchUrl} — site may be blocking or layout changed`);
+      const pageTitle = await page.title().catch(() => 'unknown');
+      const pageUrl = page.url();
+      console.warn(`[Carzone] Selector not found. Page title: "${pageTitle}" | URL: ${pageUrl}`);
       return [];
     }
 

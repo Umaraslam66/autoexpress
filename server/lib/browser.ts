@@ -6,6 +6,13 @@ async function getBrowser() {
   if (!browserPromise) {
     browserPromise = chromium.launch({
       headless: true,
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-blink-features=AutomationControlled',
+        '--disable-features=IsolateOrigins,site-per-process',
+      ],
     });
   }
 

@@ -23,7 +23,9 @@ export async function scrapeCarsIrelandComparables(
       .then(() => true)
       .catch(() => false);
     if (!selectorFound) {
-      console.warn(`[CarsIreland] Listing selector not found for ${searchUrl} — site may be blocking or layout changed`);
+      const pageTitle = await page.title().catch(() => 'unknown');
+      const pageUrl = page.url();
+      console.warn(`[CarsIreland] Selector not found. Page title: "${pageTitle}" | URL: ${pageUrl}`);
       return [];
     }
 
