@@ -53,6 +53,18 @@ export async function withBrowserContext<T>(run: (context: BrowserContext, page:
       userAgent:
         'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
       viewport: { width: 1440, height: 1200 },
+      extraHTTPHeaders: {
+        'Accept-Language': 'en-IE,en-GB;q=0.9,en;q=0.8',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+        'sec-ch-ua': '"Chromium";v="126", "Google Chrome";v="126", "Not-A.Brand";v="99"',
+        'sec-ch-ua-mobile': '?0',
+        'sec-ch-ua-platform': '"macOS"',
+        'Sec-Fetch-Dest': 'document',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Site': 'none',
+        'Sec-Fetch-User': '?1',
+        'Upgrade-Insecure-Requests': '1',
+      },
     });
     const page = await context.newPage();
 
@@ -76,7 +88,28 @@ export async function withBrowserContext<T>(run: (context: BrowserContext, page:
 }
 
 export async function dismissConsent(page: Page): Promise<void> {
-  await page.getByRole('button', { name: /accept/i }).click({ timeout: 3000 }).catch(() => undefined);
+  // Try multiple common consent button patterns used by Irish car sites
+  const patterns = [
+    page.getByRole('button', { name: /accept all/i }),
+    page.getByRole('button', { name: /accept cookies/i }),
+    page.getByRole('button', { name: /accept/i }),
+    page.getByRole('button', { name: /agree/i }),
+    page.getByRole('button', { name: /allow all/i }),
+    page.getByRole('button', { name: /i agree/i }),
+    page.locator('[id*="accept"]').first(),
+    page.locator('[class*="accept"]').first(),
+    page.locator('button[data-cookiebanner="accept_button"]').first(),
+  ];
+
+  for (const locator of patterns) {
+    try {
+      await locator.click({ timeout: 2000 });
+      await page.waitForTimeout(800);
+      return;
+    } catch {
+      // Try next pattern
+    }
+  }
 }
 
 export async function gotoWithRetry(

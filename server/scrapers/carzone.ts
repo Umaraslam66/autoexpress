@@ -10,9 +10,16 @@ interface SearchOptions {
 export async function scrapeCarzoneComparables(vehicle: Vehicle, options: SearchOptions): Promise<ComparableListing[]> {
   return withBrowserContext(async (_context, page) => {
     const searchUrl = `https://www.carzone.ie/used-cars/${slugify(vehicle.make)}/${safeModelSlug(vehicle.model)}`;
-    await gotoWithRetry(page, searchUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
+    await gotoWithRetry(page, searchUrl, { waitUntil: 'domcontentloaded', timeout: 90000 });
     await dismissConsent(page);
-    await page.waitForSelector('.stock-summary', { timeout: 30000 });
+    // Allow JS content and any consent overlays to settle
+    await page.waitForTimeout(2000);
+
+    const selectorFound = await page.waitForSelector('.stock-summary', { timeout: 60000 }).then(() => true).catch(() => false);
+    if (!selectorFound) {
+      console.warn(`[Carzone] Selector '.stock-summary' not found for ${searchUrl} — site may be blocking or layout changed`);
+      return [];
+    }
 
     // Use string-based evaluation to avoid tsx transpilation issues
     const evalScript = `
