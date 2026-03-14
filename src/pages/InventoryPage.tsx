@@ -73,7 +73,7 @@ export function InventoryPage() {
         </button>
       }
     >
-      <SectionCard title="Filters" description="URL persistence can be layered in later. The seeded UI already supports fast multi-field refinement.">
+      <SectionCard title="Filters" description="Filter by make, model, fuel type, or pricing position.">
         <div className="filter-grid">
           <label>
             Search

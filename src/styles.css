@@ -161,6 +161,12 @@ img {
 
 .status-banner-live {
   background: rgba(31, 143, 99, 0.08);
+  border-color: rgba(31, 143, 99, 0.18);
+}
+
+.status-banner-preview {
+  background: rgba(190, 122, 23, 0.08);
+  border-color: rgba(190, 122, 23, 0.2);
 }
 
 .status-banner-error {

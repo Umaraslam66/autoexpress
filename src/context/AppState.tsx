@@ -39,6 +39,8 @@ interface AppStateValue {
   scrapingSource: string | null;
   /** ISO timestamp when the current scrape started, for elapsed-time display */
   scrapingStartedAt: string | null;
+  /** True during the very first bootstrap fetch — before we know live vs demo */
+  isBootstrapping: boolean;
   dismissError: () => void;
   login: (email: string, password: string) => Promise<boolean>;
   logout: () => Promise<void>;
@@ -106,6 +108,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
   const [activeUser, setActiveUser] = useState<AppUser | null>(null);
   const [scrapingSource, setScrapingSource] = useState<string | null>(null);
   const [scrapingStartedAt, setScrapingStartedAt] = useState<string | null>(null);
+  const [isBootstrapping, setIsBootstrapping] = useState(true);
 
   async function loadBootstrap(user: AppUser | null) {
     if (!user) {
@@ -137,6 +140,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
       });
     } finally {
       setIsSyncing(false);
+      setIsBootstrapping(false);
     }
   }
 
@@ -163,6 +167,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
       pricingFiles: dataState.pricingFiles,
       scrapingSource,
       scrapingStartedAt,
+      isBootstrapping,
       dismissError: () => setSyncError(null),
       login: async (email, password) => {
         try {
@@ -249,7 +254,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
         }
       },
     }),
-    [activeUser, dataState, isSyncing, syncError, scrapingSource, scrapingStartedAt],
+    [activeUser, dataState, isSyncing, syncError, scrapingSource, scrapingStartedAt, isBootstrapping],
   );
 
   return <AppStateContext.Provider value={value}>{children}</AppStateContext.Provider>;

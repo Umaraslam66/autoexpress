@@ -39,7 +39,7 @@ export function DashboardPage() {
       }
     >
       <section className="kpi-grid">
-        <KpiCard label="In-stock vehicles" value={String(insights.length)} detail="Active AutoXpress units in the workspace seed." />
+        <KpiCard label="In-stock vehicles" value={String(insights.length)} detail="Active units in the current AutoXpress inventory." />
         <KpiCard
           label="Sufficient comps"
           value={String(sufficientComps.length)}

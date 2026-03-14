@@ -49,7 +49,7 @@ interface AppShellProps extends PropsWithChildren {
 }
 
 export function AppShell({ title, subtitle, actions, children }: AppShellProps) {
-  const { dataMode, isSyncing, syncError, lastUpdatedAt, scrapingSource, scrapingStartedAt, dismissError } =
+  const { dataMode, isSyncing, syncError, lastUpdatedAt, scrapingSource, scrapingStartedAt, isBootstrapping, dismissError } =
     useAppState();
   const elapsed = useElapsedSeconds(scrapingStartedAt);
 
@@ -91,10 +91,22 @@ export function AppShell({ title, subtitle, actions, children }: AppShellProps) 
               </svg>
             </button>
           </div>
+        ) : isBootstrapping ? (
+          /* ── Initial connect — don't assume demo or live yet ── */
+          <div className="status-banner">
+            <strong>Connecting...</strong>
+            <span>Loading data from the server</span>
+          </div>
+        ) : dataMode === 'seed' ? (
+          /* ── Server confirmed read-only preview mode ── */
+          <div className="status-banner status-banner-preview">
+            <strong>Preview mode</strong>
+            <span>This deployment uses a static dataset. Scraping and pricing decisions are disabled.</span>
+          </div>
         ) : (
-          /* ── Quiet status line ── */
-          <div className={`status-banner ${dataMode === 'live' ? 'status-banner-live' : ''}`}>
-            <strong>{dataMode === 'live' ? 'Live data' : 'Demo data'}</strong>
+          /* ── Confirmed live mode ── */
+          <div className="status-banner status-banner-live">
+            <strong>Live data</strong>
             <span>
               {isSyncing
                 ? 'Refreshing...'
