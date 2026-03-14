@@ -11,6 +11,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 **Purpose:** Automate competitive pricing analysis for a used car dealership
 **Client:** AutoXpress Ireland (400+ vehicle inventory)
 **Status:** Production-ready, all scrapers operational, 100% data coverage
+**Active branch for current work:** `feat/scraper-perf-optimisation` (do not merge to `main` without client sign-off — Railway deploys from `main`)
 
 ### The Problem
 AutoXpress manually checks pricing across competitor websites (carzone.ie, carsireland.ie), which is time-consuming, inconsistent, and leaves no audit trail. This platform replaces that manual process entirely.
@@ -76,17 +77,21 @@ autoexpress/
 │   ├── main.tsx                  # Entry point, wraps with BrowserRouter + AppStateProvider
 │   ├── config.ts                 # API_URL config (VITE_API_URL env or '')
 │   ├── types.ts                  # All TypeScript interfaces
-│   ├── context/AppState.tsx      # Global state — ALL data lives here
+│   ├── context/AppState.tsx      # Global state — ALL data lives here, including
+│   │                             #   scrapingSource, scrapingStartedAt, isBootstrapping
 │   ├── pages/
-│   │   ├── LoginPage.tsx         # Auth with pre-filled credentials
+│   │   ├── LoginPage.tsx         # Auth — empty fields, no credential hints
 │   │   ├── DashboardPage.tsx     # KPIs, priority queue, source health
 │   │   ├── InventoryPage.tsx     # Filterable vehicle table + CSV export
 │   │   ├── VehicleDetailPage.tsx # Comparables, pricing recommendation, decision form
 │   │   ├── PricingQueuePage.tsx  # Vehicles needing pricing attention
 │   │   ├── PricingFilesPage.tsx  # Generated pricing records
-│   │   └── AdminPage.tsx         # Scraping triggers, job history, user list
+│   │   └── AdminPage.tsx         # Scraping triggers with descriptions + estimates,
+│   │                             #   job history, source health, users
 │   ├── components/
-│   │   ├── layout/AppShell.tsx   # Page wrapper with sidebar + status banner
+│   │   ├── layout/AppShell.tsx   # Page wrapper; top banner has 3 states:
+│   │   │                         #   Connecting… / Preview mode / Live data
+│   │   │                         #   + scraping progress banner + dismissible error alert
 │   │   ├── layout/Sidebar.tsx    # Navigation + user profile
 │   │   └── ui/                   # Badge, KpiCard, SectionCard
 │   └── utils/
@@ -120,15 +125,21 @@ autoexpress/
 │       │   ├── queue.ts         # BullMQ queue + recurring job registration
 │       │   └── worker.ts        # Job processors
 │       ├── sources/
-│       │   ├── service.ts       # Sync orchestration (sequential)
-│       │   ├── service-parallel.ts  # Parallel competitor scraping (used in prod)
-│       │   └── adapters/        # Source-specific wrappers
+│       │   ├── service.ts       # PRIMARY sync orchestration — used by worker + API.
+│       │   │                    #   syncComparableSource() groups vehicles by make/model,
+│       │   │                    #   scrapes once per group, scores per vehicle.
+│       │   ├── service-parallel.ts  # Thin re-export of service.ts (legacy entry point)
+│       │   └── adapters/        # Source-specific wrappers (legacy per-vehicle path)
 │       └── shared/mappers.ts    # DTOs: toVehicleDto, toComparableListingDto
 │
 ├── server/scrapers/              # Playwright scraper implementations
+│   ├── rawTypes.ts              # RawScrapedListing — un-scored listing shared across
+│   │                            #   all vehicles of the same make/model
 │   ├── autoxpress.ts            # Two-pass: list pages → detail pages
-│   ├── carzone.ts               # Search + scrape comparables
-│   └── carsIreland.ts           # Search + scrape comparables (with bug fixes)
+│   ├── carzone.ts               # scrapeCarzoneMakeModel(make, model) → RawScrapedListing[]
+│   │                            #   + legacy scrapeCarzoneComparables(vehicle) kept as fallback
+│   └── carsIreland.ts           # scrapeCarsIrelandMakeModel(make, model) → RawScrapedListing[]
+│                                #   + legacy scrapeCarsIrelandComparables(vehicle)
 │
 ├── prisma/
 │   ├── schema.prisma            # 14-table database schema
@@ -224,22 +235,24 @@ GET /api/bootstrap
   → All pages render from this in-memory state
 ```
 
-### Pricing Decision
+### AppState banner states
+The top banner in AppShell has three distinct states driven by `isBootstrapping` and `dataMode`:
 ```
-POST /api/vehicles/:id/decision { targetPrice, note, type }
-  → Creates PricingDecision record
-GET /api/bootstrap  ← refetch
-  → Global state updates, all pages re-render
+isBootstrapping=true          → "Connecting…"  (neutral, before first fetch settles)
+dataMode='seed'               → "Preview mode" (amber, server confirmed DEMO_MODE=true)
+dataMode='live'               → "Live data"    (green, normal operating state)
+scrapingSource !== null       → scraping progress banner with animated bar + elapsed timer
+syncError !== null            → dismissible red error alert
 ```
 
 ### Manual Scrape Trigger
 ```
 POST /api/admin/refresh { source: 'all' }
-  → [If Redis] Enqueues BullMQ job → worker processes async
-  → [If no Redis] Runs synchronously (slow but works)
-  → scrapeAutoXpress → scrapeCarzone → scrapeCarsIreland
+  → HTTP call held open for full scrape duration (18–25 min for full sync)
+  → AppState sets scrapingSource + scrapingStartedAt → progress banner appears
+  → scrapeAutoXpress → scrapeCarzone (deduplicated) → scrapeCarsIreland (deduplicated)
   → Creates VehicleMatches, PricingRecommendations
-GET /api/bootstrap ← refetch
+GET /api/bootstrap ← refetch on completion
 ```
 
 ---
@@ -291,8 +304,6 @@ Position determination:
 
 ### Attention Score (`src/utils/vehicleAnalysis.ts`)
 
-Used to prioritise which vehicles need review:
-
 ```
 +35  price is ABOVE market
 +10  price is BELOW market
@@ -315,35 +326,50 @@ Needs review if: attentionScore ≥ 20 OR no decision
 - **Pass 2:** Visit each vehicle detail page for colour, registration, full specs
 - **Critical fix:** Uses string-based `page.evaluate()` (not function serialization) to avoid tsx `__name` transpilation error
 
-### Carzone
-- **URL:** `https://www.carzone.ie/used-cars/{make}/{model}`
-- Searches per vehicle, extracts top N comparables
-- Returns: title, year, mileage, fuel, transmission, price, dealer, location
+### Carzone & CarsIreland — Deduplicated Parallel Scraping
 
-### CarsIreland
-- **URL:** `https://www.carsireland.ie/used-cars/{make}/{model}`
-- **Bug fix 1:** Price parsing - extract first text node only (prevents "€14,950 Per Month" → €14,950,503)
-- **Bug fix 2:** Fuel/transmission - pattern match in variant text (TDI→Diesel, TSI→Petrol, PHEV→Hybrid, automatic/DSG/S-tronic detection)
+**Old approach (per-vehicle):** 489 vehicles × 2 sources = 978 browser sessions → ~110 minutes
 
-### Parallel Scraping (`service-parallel.ts`)
-- Promise.allSettled batching: 2 vehicles concurrently
-- Reduces 82 hours (sequential) to ~110 minutes
-- Batch size of 2 to minimize database deadlocks (~4%)
+**New approach (per make/model group):**
+```
+Active vehicles (489)
+  → grouped by (make, model) → ~80–92 unique groups
+
+For each group (4 concurrent):
+  scrapeCarzoneMakeModel(make, model) → RawScrapedListing[] (≤50 raw results)
+
+  For each vehicle in the group:
+    rawToComparable(vehicle, raw) → score each listing
+    .sort(matchScore desc).slice(0, maxComparablesPerSource)
+    → persist VehicleMatch records
+```
+
+~80 groups × 2 sources = **~160 browser sessions → ~18 minutes**. Match quality unchanged.
+
+**Key files:**
+- `server/scrapers/rawTypes.ts` — `RawScrapedListing` type (no vehicleId, no score)
+- `server/scrapers/carzone.ts` — `scrapeCarzoneMakeModel(make, model)` (new) + legacy fn
+- `server/scrapers/carsIreland.ts` — `scrapeCarsIrelandMakeModel(make, model)` (new) + legacy fn
+- `server/modules/sources/service.ts` — `syncComparableSource()` contains the grouping + `runWithConcurrency(4)` logic
+
+**CarsIreland bug fixes (still in place):**
+- Price: extract first text node only (prevents "€14,950 Per Month" → €14,950,503)
+- Fuel/transmission: `parseFuelAndTransmission()` helper — TDI→Diesel, TSI→Petrol, PHEV→Hybrid, automatic/DSG/S-tronic detection
 
 ### Playwright Configuration
-- Headless Chromium
+- Headless Chromium, singleton browser instance
 - User agent: Chrome 126 on macOS (anti-bot)
 - Viewport: 1440x1200
-- Retry: 3x on transient network errors (ERR_NETWORK_CHANGED, ERR_CONNECTION_RESET, etc.)
-- `withBrowserContext(fn)` wrapper in `server/lib/browser.ts`
+- Retry: 3x on transient network errors
+- `withBrowserContext(fn)` wrapper in `server/lib/browser.ts` — creates/closes a context per call
 
 ---
 
 ## Authentication & Sessions
 
 ### Modes
-- **Demo mode** (`DEMO_MODE=true`): Hardcoded users, no DB writes, read-only
-- **Live mode** (`DEMO_MODE=false`): Bcrypt verification, SessionRecord in DB
+- **Live mode** (`DEMO_MODE=false`, default): Bcrypt verification, SessionRecord in DB
+- **Preview mode** (`DEMO_MODE=true`): Hardcoded users, no DB writes, read-only — used for client review deployments with static data
 
 ### Default Users (after seeding)
 | Email | Password | Role |
@@ -364,7 +390,7 @@ Needs review if: attentionScore ≥ 20 OR no decision
 NODE_ENV=development
 PORT=8000
 SESSION_SECRET=your-secret-here
-DEMO_MODE=false
+DEMO_MODE=false          # Set true for read-only client-review deployments
 
 # Database
 DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/autoxpress
@@ -380,7 +406,7 @@ SCRAPE_MAX_COMPARABLES_PER_SOURCE=4
 # Scraping (production)
 SCRAPE_MAX_VEHICLES=500
 SCRAPE_MAX_AUTOXPRESS_PAGES=50
-SCRAPE_MAX_COMPARABLES_PER_SOURCE=15
+SCRAPE_MAX_COMPARABLES_PER_SOURCE=15   # Per vehicle, after scoring the raw pool
 
 # Optional
 AUTOXPRESS_FEED_URL=
@@ -412,7 +438,7 @@ npm run db:seed             # Seed default data
 
 ### Running
 ```bash
-# Terminal 1 - Backend API
+# Terminal 1 - Backend API (env vars must be passed explicitly)
 DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:5432/autoxpress" \
 REDIS_URL="redis://127.0.0.1:6379" \
 npm run dev:server
@@ -427,7 +453,7 @@ npm run dev
 ```
 
 ### Access
-- **Frontend:** http://localhost:5173
+- **Frontend:** http://localhost:5173 (or 5174 if port taken)
 - **Backend API:** http://localhost:8000
 - **Login:** `admin@autoxpress.ie` / `autoxpress`
 
@@ -448,7 +474,7 @@ npm run db:seed          # tsx prisma/seed.ts
 
 ### Type Checking
 ```bash
-npx tsc -b --noEmit                        # Check frontend TypeScript
+npx tsc --noEmit                           # Check frontend TypeScript
 npx tsc -p tsconfig.server.json --noEmit   # Check backend TypeScript
 ```
 
@@ -465,14 +491,18 @@ npx tsc -p tsconfig.server.json --noEmit   # Check backend TypeScript
 - **Redis** — Job queue + sessions
 
 ### Deployment
-1. Push to GitHub
-2. Railway auto-deploys from `main` branch
+1. Push to GitHub (`main` branch)
+2. Railway auto-deploys from `main`
 3. See `DEPLOYMENT.md` for full setup
 
 ### Railway Config
 - `railway.json` — Build config
 - `nixpacks.toml` — Nixpacks build settings
 - `Procfile` — `web: node dist-server/index.js` and `worker: node dist-server/worker.js`
+
+### Deployment modes
+- **Production** (`DEMO_MODE=false`): full live scraping, real DB, pricing decisions enabled
+- **Client preview** (`DEMO_MODE=true`): static compressed DB, all write actions blocked, banner says "Preview mode"
 
 ---
 
@@ -484,8 +514,8 @@ Queue name: `autoxpress-ingestion`
 | Job | Schedule | What it does |
 |---|---|---|
 | `repeat-autoxpress` | Every 4 hours | Scrape AutoXpress inventory |
-| `repeat-carzone` | Every 12 hours | Scrape Carzone comparables |
-| `repeat-carsireland` | Every 12 hours | Scrape CarsIreland comparables |
+| `repeat-carzone` | Every 12 hours | Scrape Carzone comparables (deduplicated) |
+| `repeat-carsireland` | Every 12 hours | Scrape CarsIreland comparables (deduplicated) |
 | `sync-all` | Manual trigger | All three scrapers + pricing recompute |
 | `sync-source` | Manual trigger | Single source scrape |
 
@@ -501,15 +531,17 @@ If Redis is unavailable, scraping falls back to synchronous execution in the API
 - **Playwright tsx transpilation:** `page.evaluate()` uses string-based eval, not function serialization
 - **AutoXpress incomplete coverage:** Two-pass approach captures 100% of vehicles
 - **CarsIreland price corruption:** Extract first text node only
-- **CarsIreland missing fuel/transmission:** Pattern matching in variant text
-- **Sequential scraping (82h bottleneck):** Parallel batching → 110 minutes
+- **CarsIreland missing fuel/transmission:** `parseFuelAndTransmission()` helper
+- **Sequential scraping (82h bottleneck):** Deduplicated parallel scraping → ~18 minutes
 - **SourceRun healthStatus crash:** Removed non-existent field from schema
+- **"Demo data" flash on every page load:** `isBootstrapping` state prevents mode being shown before first bootstrap response
+- **Hardcoded credentials on login page:** Removed pre-filled email/password and credential hint list
+- **Scattered dev/seed language:** Removed "workspace seed", "seeded UI", "demo mode...review build" copy from all pages
 
 ### Active
-- Frontend not consistently using `config.ts` API_URL (most fetch calls are relative paths, which works via Vite proxy)
+- Frontend not consistently using `config.ts` API_URL (most fetch calls are relative paths, works via Vite proxy)
 - TypeScript build has some type errors (runtime unaffected)
-- DB deadlocks ~4% with parallel scraping (acceptable, handled by Promise.allSettled)
-- No frontend loading indicators during scraping operations
+- Admin refresh HTTP call is held open for the full scrape duration — long-running sync blocks the tab (no async job polling yet)
 
 ---
 
@@ -521,15 +553,24 @@ Competitor Listings:     2,159 (874 Carzone + 1,285 CarsIreland)
 Vehicle Matches:         10,507
 Pricing Recommendations: 1,467
 Data Coverage:           100%
+Scrape Duration (post-optimisation): ~18 min (was ~110 min)
 ```
 
 ---
 
 ## TODO / Roadmap
 
-### MVP Completion
-- [ ] Frontend loading states during scraping
-- [ ] Toast notifications for user actions
+### In progress (`feat/scraper-perf-optimisation`)
+- [x] Deduplicated parallel competitor scraping (~6x fewer browser sessions)
+- [x] Scraping progress banner with animated bar + elapsed timer
+- [x] Dismissible error alert on scrape failure
+- [x] Cleaner Admin page (descriptions, time estimates, active-source highlighting)
+- [x] Remove all demo/seed language from production UI
+- [x] Fix "Demo data" flash on page load
+
+### Next
+- [ ] Async scrape jobs (fire-and-forget + polling) so the browser tab isn't blocked
+- [ ] Toast notifications for pricing decisions and file generation
 - [ ] CSV export for pricing files
 - [ ] Consistent use of `config.ts` API_URL across frontend
 
@@ -560,16 +601,20 @@ Data Coverage:           100%
 
 | Decision | Rationale |
 |---|---|
-| Playwright over Firecrawl | Free, full control, working perfectly with string-eval fix |
+| Playwright over Firecrawl | Free, full control, working with string-eval fix |
 | Bootstrap pattern (single API call) | Simpler than multiple endpoints, fast enough at current scale |
 | Store all raw scraped data | Full audit trail, can re-parse without re-scraping |
 | Two competitor sites only | Carzone + CarsIreland cover majority of Irish used car market |
 | Confidence weighting (HIGH/MEDIUM only) | Low confidence matches distort pricing |
-| Parallel batch size = 2 | Balance between speed and DB deadlock rate |
+| Deduplicate scrapes by make/model | One browser session per unique (make, model) pair instead of per vehicle — ~6x fewer sessions, same match quality |
+| Concurrency limit = 4 groups | Balance between speed and memory; each group opens one browser context |
+| `RawScrapedListing` type | Clean separation between "what was scraped" and "how it scores against a specific vehicle" |
+| `isBootstrapping` state | Prevents "Demo data" flash before first server response; users see "Connecting…" instead |
+| DEMO_MODE for client previews | Static DB + read-only mode lets client review UI without live scrapers running |
 | dealershipId everywhere | Future SaaS multi-tenancy ready from day one |
 
 ---
 
 **Repository:** https://github.com/Umaraslam66/autoexpress
-**Last Updated:** March 12, 2026
-**Version:** 1.1.0
+**Last Updated:** March 14, 2026
+**Version:** 1.2.0
