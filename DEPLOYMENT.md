@@ -1,170 +1,152 @@
-# AutoXpress Deployment Guide - Railway
+# AutoXpress Deployment Guide
 
-## 🚀 Quick Deploy to Railway
+## Modes
 
-### Step 1: Create Railway Account
-1. Go to https://railway.app
-2. Sign up with GitHub (use your https://github.com/Umaraslam66/autoexpress repo)
-3. Verify your email
+This project supports two deployment modes:
 
-### Step 2: Create New Project
-1. Click "New Project"
-2. Select "Deploy from GitHub repo"
-3. Choose `Umaraslam66/autoexpress`
-4. Railway will auto-detect the configuration
+### 1. Demo preview
+- Purpose: client review, read-only walkthrough, no live scraping
+- Required services: web only
+- Required env: `DEMO_MODE=true`, `SESSION_SECRET`
+- Optional env: `DATABASE_URL`, `REDIS_URL`
+- Behavior:
+  - login works against bundled demo users
+  - dashboard data comes from `src/data/mockData.ts`
+  - pricing writes and source refresh actions are disabled
 
-### Step 3: Add Database Services
-Railway will deploy your app, but you need to add databases:
+### 2. Live production
+- Purpose: real dealership usage with scraping and saved pricing actions
+- Required services: web + worker + PostgreSQL + Redis
+- Required env: `DATABASE_URL`, `REDIS_URL`, `SESSION_SECRET`
+- Optional env: `AUTOXPRESS_FEED_URL`, scrape limits
+- Behavior:
+  - login uses database-backed users
+  - bootstrap reads from PostgreSQL
+  - refresh jobs run through BullMQ/Redis
+  - worker runs Playwright scrapers
 
-#### Add PostgreSQL:
-1. In your project, click "New" → "Database" → "Add PostgreSQL"
-2. Railway will automatically set `DATABASE_URL` environment variable
-3. Wait for it to provision (1-2 minutes)
+## Important Runtime Notes
 
-#### Add Redis:
-1. Click "New" → "Database" → "Add Redis"
-2. Railway will automatically set `REDIS_URL` environment variable
-3. Wait for it to provision (1-2 minutes)
+- `npm run start:web` now starts safely in both modes.
+- In demo mode it does not try to touch Prisma or the database.
+- In live mode it applies schema on boot with:
+  - `prisma migrate deploy` if `prisma/migrations/` exists
+  - otherwise `prisma db push --skip-generate`
+- This repo does not currently contain Prisma migrations, so live deploys still use `db push`.
+- If you want stricter production change control, add Prisma migrations before handing this to the client.
 
-### Step 4: Add Worker Service
-1. Click "New" → "Empty Service"
-2. Name it "Worker"
-3. Connect to your GitHub repo
-4. Set Root Directory: `/`
-5. Set Start Command: `npm run start:worker`
-6. Add these environment variables (copy from main service):
-   - `DATABASE_URL` (from PostgreSQL service)
-   - `REDIS_URL` (from Redis service)
-   - `SESSION_SECRET`
-   - `SCRAPE_MAX_VEHICLES`
-   - `SCRAPE_MAX_AUTOXPRESS_PAGES`
-   - `SCRAPE_MAX_COMPARABLES_PER_SOURCE`
+## Railway
 
-### Step 5: Configure Environment Variables
-Click on your main service → "Variables" and add:
+## Demo preview on Railway
 
+Use this when you want to show the product quickly without scraper infrastructure.
+
+1. Deploy the repo as a single web service.
+2. Set:
+
+```env
+DEMO_MODE=true
+SESSION_SECRET=<strong-random-secret>
+NODE_ENV=production
 ```
-DATABASE_URL=<auto-populated by Railway>
-REDIS_URL=<auto-populated by Railway>
-SESSION_SECRET=your-super-secret-key-change-this-in-production
-PORT=8000
+
+3. Do not deploy a worker.
+4. Open the Railway generated domain and log in with:
+   - `admin@autoxpress.ie` / `autoxpress`
+   - `pricing@autoxpress.ie` / `autoxpress`
+
+This is the safest way to share a working preview without exposing scraper reliability issues.
+
+## Live production on Railway
+
+Use this when the client is ready to operate the platform for real.
+
+1. Deploy the repo as a web service.
+2. Add PostgreSQL.
+3. Add Redis.
+4. Create a second service from the same repo for the worker.
+5. Set the worker start command to:
+
+```bash
+npm run start:worker
+```
+
+6. Set the web and worker env vars:
+
+```env
+NODE_ENV=production
+SESSION_SECRET=<strong-random-secret>
+DATABASE_URL=<railway-postgres-url>
+REDIS_URL=<railway-redis-url>
+AUTOXPRESS_FEED_URL=
 SCRAPE_MAX_VEHICLES=50
 SCRAPE_MAX_AUTOXPRESS_PAGES=5
 SCRAPE_MAX_COMPARABLES_PER_SOURCE=10
-AUTOXPRESS_FEED_URL=
 ```
 
-### Step 6: Run Database Migrations
-1. Go to your main service
-2. Click "Settings" → "Deploy Trigger"
-3. After deployment, go to "Deployments" → Click latest deployment
-4. Click "View Logs"
-5. Once deployed, open "Terminal" tab
-6. Run: `npm run db:push`
-7. Run: `npm run db:seed`
+## Client handoff on Railway
 
-### Step 7: Frontend Hosting
-The Express API now serves the built Vite frontend from the same Railway web service. In production, `src/config.ts` defaults to same-origin requests, so `VITE_API_URL` is optional unless you intentionally split frontend and backend across different domains.
+Recommended sequence:
 
-### Step 8: Enable Public Networking
-1. Go to Settings → Networking
-2. Click "Generate Domain"
-3. Your app will be live at: `https://your-app.railway.app`
+1. First share a demo deploy from your Railway project.
+2. Once approved, create a new Railway project owned by the client.
+3. Connect the same GitHub repo, or transfer the repo to the client first.
+4. Recreate the production stack in the client-owned project:
+   - web
+   - worker
+   - postgres
+   - redis
+5. Point the client domain to the new project.
 
-## 🔄 Alternative: Deploy Frontend Separately
+This is cleaner than trying to keep billing and ownership mixed in your own project long-term.
 
-If you want faster frontend performance:
+## Custom domain
 
-### Option A: Deploy Frontend to Vercel
-1. Create a new Vercel project
-2. Connect to your GitHub repo
-3. Set Build Command: `npm run build`
-4. Set Output Directory: `dist`
-5. Add Environment Variable: `VITE_API_URL=https://your-railway-backend.railway.app`
+For either mode:
 
-### Option B: Deploy Frontend to Netlify
-1. Create a new Netlify site
-2. Connect to your GitHub repo
-3. Set Build Command: `npm run build`
-4. Set Publish Directory: `dist`
-5. Add Environment Variable: `VITE_API_URL=https://your-railway-backend.railway.app`
+1. Add the domain in the hosting platform dashboard.
+2. Update DNS at the registrar with the required CNAME or A/ALIAS record.
+3. Wait for SSL provisioning.
+4. If frontend and API stay on the same service, no `VITE_API_URL` is needed.
 
-## 📝 Important Notes
+## Recommended Option Matrix
 
-### Railway Free Tier Limits:
-- $5 credit per month (renews monthly)
-- Should be enough for development/demo
-- Upgrade to Pro ($20/month) for production
+### Option A: Railway demo now, Railway production later
+- Best for: fastest client review and lowest migration effort
+- Pros:
+  - already closest to your current setup
+  - same repo and same deployment model
+  - easiest domain setup later
+- Cons:
+  - scraper success can still depend on remote target blocking and runtime limits
 
-### Services Required:
-1. **Main API Server** - Handles HTTP requests
-2. **Worker** - Handles background scraping jobs
-3. **PostgreSQL** - Database
-4. **Redis** - Queue and caching
+### Option B: Railway demo now, Render production later
+- Best for: managed platform with separate web/worker primitives and less coupling to your current account
+- Pros:
+  - good separation between web service and worker service
+  - easy custom domain flow
+- Cons:
+  - you still need PostgreSQL, Redis, and Playwright-compatible worker runtime
+  - slightly more migration work than staying on Railway
 
-### Environment Variables Reference:
-- `DATABASE_URL` - Auto-populated by Railway PostgreSQL
-- `REDIS_URL` - Auto-populated by Railway Redis
-- `SESSION_SECRET` - Generate with: `openssl rand -base64 32`
-- `PORT` - Railway sets this automatically, use 8000 as fallback
-- `SCRAPE_MAX_VEHICLES` - Number of vehicles to scrape (default: 50)
-- `SCRAPE_MAX_AUTOXPRESS_PAGES` - Pages to scrape from AutoXpress (default: 5)
-- `SCRAPE_MAX_COMPARABLES_PER_SOURCE` - Comparables per competitor site (default: 10)
+### Option C: Demo on Railway, production on a VPS
+- Best for: highest scraper control and long-term client ownership
+- Pros:
+  - full control over Chromium, memory, and background jobs
+  - easiest to debug scraper breakage
+  - simplest billing story for the client
+- Cons:
+  - you own more ops work
+  - backups, monitoring, TLS, and deploy automation become your responsibility
 
-### Monitoring:
-- Check logs in Railway dashboard
-- Monitor memory/CPU usage
-- Set up alerts for failures
+## What I Recommend
 
-### Troubleshooting:
+For this project, the best path is:
 
-**Build fails:**
-- Check build logs in Railway
-- Ensure all dependencies are in `package.json`
-- Verify TypeScript compiles locally
+1. Keep Railway for the client demo with `DEMO_MODE=true`.
+2. After approval, deploy a fresh client-owned live environment.
+3. Choose:
+   - Railway if the client wants the simplest managed setup
+   - a VPS if scraper reliability matters more than platform convenience
 
-**Database connection fails:**
-- Verify `DATABASE_URL` is set correctly
-- Check PostgreSQL service is running
-- Run `npm run db:push` to sync schema
-
-**Scraping fails:**
-- Check if Playwright is installed (should happen in build step)
-- Verify memory limits (Railway default: 512MB, may need upgrade)
-- Check scraping logs in worker service
-
-**Worker not processing jobs:**
-- Verify `REDIS_URL` is correct in worker service
-- Check worker service logs
-- Ensure worker service is deployed and running
-
-## 🎯 Post-Deployment Checklist
-
-- [ ] Main API service is running
-- [ ] Worker service is running
-- [ ] PostgreSQL is provisioned
-- [ ] Redis is provisioned
-- [ ] Database schema is pushed (`npm run db:push`)
-- [ ] Database is seeded (`npm run db:seed`)
-- [ ] Environment variables are set
-- [ ] Public domain is generated
-- [ ] Can access frontend at Railway URL
-- [ ] Can login with default credentials
-- [ ] Scraping jobs are processing
-- [ ] Data is appearing in the dashboard
-
-## 🔐 Default Credentials
-
-After seeding:
-- Admin: `admin@autoxpress.ie` / `autoxpress`
-- Manager: `pricing@autoxpress.ie` / `autoxpress`
-
-**IMPORTANT:** Change these in production!
-
-## 📞 Support
-
-If you encounter issues:
-1. Check Railway logs
-2. Verify all environment variables
-3. Ensure all services are running
-4. Check GitHub repo is up to date
+If you want the least risky handoff, do not migrate the existing demo project into production. Treat the demo and live client system as separate deployments.

@@ -5,8 +5,8 @@ import { useAppState } from '../context/AppState';
 export function LoginPage() {
   const { activeUser, login } = useAppState();
   const navigate = useNavigate();
-  const [email, setEmail] = useState('pricing@autoxpress.ie');
-  const [password, setPassword] = useState('autoxpress');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -40,15 +40,15 @@ export function LoginPage() {
         <div className="hero-metrics">
           <div>
             <strong>400+</strong>
-            <span>Stock units targeted in MVP</span>
+            <span>Active stock units monitored</span>
           </div>
           <div>
             <strong>2x daily</strong>
-            <span>Minimum market refresh cadence</span>
+            <span>Market data refresh cadence</span>
           </div>
           <div>
             <strong>Audit-ready</strong>
-            <span>Decisions, overrides, and exports retained</span>
+            <span>Full decision and override history</span>
           </div>
         </div>
       </div>
@@ -57,7 +57,7 @@ export function LoginPage() {
         <div>
           <p className="eyebrow">Secure access</p>
           <h2>Sign in</h2>
-          <p>Sign in with a seeded AutoXpress operator account backed by the server database.</p>
+          <p>Sign in to your AutoXpress account.</p>
         </div>
 
         <form className="login-form" onSubmit={handleSubmit}>
@@ -75,16 +75,6 @@ export function LoginPage() {
           </button>
         </form>
 
-        <div className="credential-list">
-          <div>
-            <strong>Pricing manager</strong>
-            <span>pricing@autoxpress.ie / autoxpress</span>
-          </div>
-          <div>
-            <strong>Admin</strong>
-            <span>admin@autoxpress.ie / autoxpress</span>
-          </div>
-        </div>
       </div>
     </div>
   );

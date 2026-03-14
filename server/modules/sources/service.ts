@@ -9,14 +9,103 @@ import {
   type Prisma,
 } from '@prisma/client';
 import type { ComparableListing, Vehicle } from '../../../src/types.js';
+import type { RawScrapedListing } from '../../scrapers/rawTypes.js';
 import { env } from '../../config/env.js';
 import { prisma } from '../../lib/prisma.js';
 import { HttpError } from '../../lib/http.js';
+import { scoreComparable } from '../../lib/matching.js';
+import { scrapeCarzoneMakeModel } from '../../scrapers/carzone.js';
+import { scrapeCarsIrelandMakeModel } from '../../scrapers/carsIreland.js';
 import { syncAutoXpressFeedInventory } from './adapters/autoxpressFeed.js';
 import { syncAutoXpressWebInventory } from './adapters/autoxpressWeb.js';
-import { syncCarzoneComparables } from './adapters/carzoneWeb.js';
-import { syncCarsIrelandComparables } from './adapters/carsIrelandWeb.js';
 import { recomputeDealershipPricing } from '../pricing/service.js';
+
+// Maximum number of unique (make, model) groups to scrape concurrently.
+// Each group fires one browser session; 4 concurrent keeps memory reasonable
+// while being ~4x faster than the old per-vehicle sequential approach.
+const CONCURRENT_SCRAPE_GROUPS = 4;
+
+/**
+ * Run an array of async tasks with a maximum concurrency limit, collecting
+ * all results (fulfilled and rejected) before returning.
+ */
+async function runWithConcurrency<T>(
+  tasks: Array<() => Promise<T>>,
+  limit: number,
+): Promise<PromiseSettledResult<T>[]> {
+  const results: PromiseSettledResult<T>[] = [];
+  for (let i = 0; i < tasks.length; i += limit) {
+    const batch = await Promise.allSettled(tasks.slice(i, i + limit).map((fn) => fn()));
+    results.push(...batch);
+  }
+  return results;
+}
+
+type DbVehicle = Awaited<ReturnType<typeof prisma.vehicle.findMany>>[number];
+
+function toVehicleDto(vehicle: DbVehicle): Vehicle {
+  return {
+    id: vehicle.id,
+    stockId: vehicle.stockId,
+    registration: vehicle.registration,
+    vinFragment: vehicle.vinFragment ?? undefined,
+    make: vehicle.make,
+    model: vehicle.model,
+    variant: vehicle.variant,
+    year: vehicle.year,
+    mileageKm: vehicle.mileageKm,
+    fuel: vehicle.fuel,
+    transmission: vehicle.transmission,
+    bodyType: vehicle.bodyType,
+    engineLitres: vehicle.engineLitres,
+    colour: vehicle.colour,
+    price: vehicle.price,
+    status: 'active',
+    dateAdded: vehicle.dateAdded.toISOString(),
+    location: vehicle.location,
+    vehicleUrl: vehicle.vehicleUrl,
+    imageUrl: vehicle.imageUrl,
+    notes: [],
+    priceHistory: [],
+  };
+}
+
+/** Convert a raw scraped listing into a scored ComparableListing for a specific vehicle. */
+function rawToComparable(vehicle: Vehicle, raw: RawScrapedListing): ComparableListing {
+  const comparable: ComparableListing = {
+    id: `${raw.source}-${raw.listingId}`,
+    vehicleId: vehicle.id,
+    source: raw.source,
+    listingId: raw.listingId,
+    listingUrl: raw.listingUrl,
+    title: raw.title,
+    make: raw.make,
+    model: raw.model,
+    variant: raw.variant,
+    year: raw.year || vehicle.year,
+    mileageKm: raw.mileageKm,
+    fuel: raw.fuel,
+    transmission: raw.transmission,
+    bodyType: raw.bodyType,
+    engineLitres: raw.engineLitres,
+    price: raw.price,
+    dealerName: raw.dealerName,
+    dealerLocation: raw.dealerLocation,
+    listedAt: raw.scrapedAt,
+    daysListed: 0,
+    imageUrl: raw.imageUrl,
+    lastSeenAt: raw.scrapedAt,
+    matchScore: 0,
+    confidence: 'low',
+    explanation: [],
+  };
+
+  const scoring = scoreComparable(vehicle, comparable);
+  comparable.matchScore = scoring.score;
+  comparable.confidence = scoring.confidence;
+  comparable.explanation = scoring.explanation;
+  return comparable;
+}
 
 type ComparableSourceName = typeof SourceName.CARZONE | typeof SourceName.CARSIRELAND;
 
@@ -434,10 +523,7 @@ async function syncComparableSource(
   });
 
   const vehicles = await prisma.vehicle.findMany({
-    where: {
-      dealershipId,
-      status: VehicleStatus.ACTIVE,
-    },
+    where: { dealershipId, status: VehicleStatus.ACTIVE },
   });
 
   if (!vehicles.length) {
@@ -452,55 +538,88 @@ async function syncComparableSource(
     message: `Starting ${source.toLowerCase()} comparable sync.`,
   });
 
+  // ── Deduplication: group vehicles by (make, model) ──────────────────────
+  // Instead of launching one browser session per vehicle, we scrape each
+  // unique make/model combination ONCE and re-use those results for every
+  // vehicle that shares the same make/model.
+  //
+  // Example: 15 VW Golfs → 1 browser session instead of 15.
+  // For 489 vehicles with ~80 unique combos: 978 sessions → ~160 sessions.
+  const groups = new Map<string, DbVehicle[]>();
+  for (const vehicle of vehicles) {
+    const key = `${vehicle.make.toLowerCase()}|${vehicle.model.toLowerCase()}`;
+    const group = groups.get(key) ?? [];
+    group.push(vehicle);
+    groups.set(key, group);
+  }
+
+  const uniqueGroups = [...groups.entries()];
+  console.log(
+    `[${source}] Deduplication: ${vehicles.length} vehicles → ` +
+    `${uniqueGroups.length} unique make/model pairs (${CONCURRENT_SCRAPE_GROUPS} concurrent)`,
+  );
+
   let recordsProcessed = 0;
+  let groupsCompleted = 0;
+
+  const groupTasks = uniqueGroups.map(([key, groupVehicles]) => async () => {
+    const [make, model] = key.split('|');
+
+    // One browser session per make/model combination
+    let rawListings: RawScrapedListing[];
+    try {
+      rawListings =
+        source === SourceName.CARZONE
+          ? await scrapeCarzoneMakeModel(make, model)
+          : await scrapeCarsIrelandMakeModel(make, model);
+    } catch (err) {
+      console.error(`[${source}] Failed to scrape ${make} ${model}:`, (err as Error).message);
+      return 0;
+    }
+
+    if (!rawListings.length) {
+      console.warn(`[${source}] No results for ${make} ${model}`);
+      return 0;
+    }
+
+    let groupRecords = 0;
+
+    // Score and persist independently for each vehicle in this make/model group
+    for (const dbVehicle of groupVehicles) {
+      const vehicleDto = toVehicleDto(dbVehicle);
+
+      const scoredListings = rawListings
+        .map((raw) => rawToComparable(vehicleDto, raw))
+        .sort((a, b) => b.matchScore - a.matchScore)
+        .slice(0, env.scrapeMaxComparablesPerSource);
+
+      try {
+        await prisma.$transaction(async (tx) => {
+          for (const listing of scoredListings) {
+            await persistComparable(tx, dealershipId, sourceRun.id, dbVehicle.id, listing, listing);
+          }
+        });
+        groupRecords += scoredListings.length;
+      } catch (err) {
+        console.error(
+          `[${source}] Failed to persist comparables for vehicle ${dbVehicle.stockId}:`,
+          (err as Error).message,
+        );
+      }
+    }
+
+    groupsCompleted += 1;
+    recordsProcessed += groupRecords;
+    console.log(
+      `[${source}] ${groupsCompleted}/${uniqueGroups.length} groups done — ` +
+      `${make} ${model}: ${rawListings.length} raw → ${groupRecords} persisted across ${groupVehicles.length} vehicles`,
+    );
+
+    return groupRecords;
+  });
 
   try {
-    for (const vehicle of vehicles) {
-      const vehicleDto: Vehicle = {
-        id: vehicle.id,
-        stockId: vehicle.stockId,
-        registration: vehicle.registration,
-        vinFragment: vehicle.vinFragment ?? undefined,
-        make: vehicle.make,
-        model: vehicle.model,
-        variant: vehicle.variant,
-        year: vehicle.year,
-        mileageKm: vehicle.mileageKm,
-        fuel: vehicle.fuel,
-        transmission: vehicle.transmission,
-        bodyType: vehicle.bodyType,
-        engineLitres: vehicle.engineLitres,
-        colour: vehicle.colour,
-        price: vehicle.price,
-        status: 'active',
-        dateAdded: vehicle.dateAdded.toISOString(),
-        location: vehicle.location,
-        vehicleUrl: vehicle.vehicleUrl,
-        imageUrl: vehicle.imageUrl,
-        notes: [],
-        priceHistory: [],
-      };
-
-      const result =
-        source === SourceName.CARZONE
-          ? await syncCarzoneComparables(vehicleDto)
-          : await syncCarsIrelandComparables(vehicleDto);
-
-      await prisma.$transaction(async (tx) => {
-        for (const [index, listing] of result.listings.entries()) {
-          await persistComparable(
-            tx,
-            dealershipId,
-            sourceRun.id,
-            vehicle.id,
-            listing,
-            result.rawPayloads[index]?.payload ?? listing,
-          );
-        }
-      });
-
-      recordsProcessed += result.listings.length;
-    }
+    await runWithConcurrency(groupTasks, CONCURRENT_SCRAPE_GROUPS);
 
     await finalizeSourceRun(prisma, {
       sourceRunId: sourceRun.id,
@@ -508,12 +627,12 @@ async function syncComparableSource(
       status: JobStatus.SUCCESS,
       healthStatus: SourceHealthStatus.HEALTHY,
       recordsProcessed,
-      message: `Persisted ${recordsProcessed} ${source.toLowerCase()} comparable listings.`,
+      message:
+        `Persisted ${recordsProcessed} ${source.toLowerCase()} comparable listings ` +
+        `from ${uniqueGroups.length} unique make/model pairs (${vehicles.length} vehicles).`,
     });
 
-    return {
-      recordsProcessed,
-    };
+    return { recordsProcessed };
   } catch (error) {
     await finalizeSourceRun(prisma, {
       sourceRunId: sourceRun.id,

@@ -85,7 +85,7 @@ export function VehicleDetailPage() {
             Next
           </Link>
           <button type="button" className="primary-button" onClick={() => void handleGeneratePricingFile()}>
-            {isDemoMode ? 'Pricing file disabled in demo' : 'Generate pricing file'}
+            {isDemoMode ? 'Generate pricing file (disabled)' : 'Generate pricing file'}
           </button>
         </div>
       }
@@ -258,7 +258,7 @@ export function VehicleDetailPage() {
                 ))}
               </div>
               {isDemoMode ? (
-                <p>Demo mode is active. Pricing edits and exports are disabled for this review build.</p>
+                <p className="muted-copy">This deployment is read-only. Pricing decisions and exports are not saved.</p>
               ) : null}
 
               <textarea

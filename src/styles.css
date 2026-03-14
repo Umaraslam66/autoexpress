@@ -100,6 +100,22 @@ img {
   gap: 0.9rem;
 }
 
+.sidebar-brand > div,
+.sidebar-user > div {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.sidebar-brand strong,
+.sidebar-user strong {
+  color: #fff7e8;
+}
+
+.sidebar-brand span,
+.sidebar-user span {
+  color: rgba(249, 241, 222, 0.72);
+}
+
 .brand-mark {
   display: inline-flex;
   align-items: center;
@@ -115,6 +131,103 @@ img {
 .sidebar-nav {
   display: grid;
   gap: 0.55rem;
+}
+
+.sidebar-panel {
+  display: grid;
+  gap: 1rem;
+  padding: 1rem;
+  border-radius: 1.25rem;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.04)),
+    rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.sidebar-panel-head {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.sidebar-panel-head strong {
+  color: #fff7e8;
+}
+
+.sidebar-panel-head span,
+.sidebar-empty,
+.sidebar-mini-item span {
+  color: rgba(249, 241, 222, 0.72);
+}
+
+.sidebar-panel-head-compact {
+  gap: 0;
+}
+
+.sidebar-status-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+.sidebar-status-pill {
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.75rem 0.85rem;
+  border-radius: 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.sidebar-status-pill span {
+  color: rgba(249, 241, 222, 0.7);
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.sidebar-status-pill strong {
+  color: #fff7e8;
+  font-size: 0.95rem;
+  text-transform: capitalize;
+}
+
+.sidebar-status-pill.is-healthy {
+  border-color: rgba(31, 143, 99, 0.4);
+  background: rgba(31, 143, 99, 0.12);
+}
+
+.sidebar-status-pill.is-degraded {
+  border-color: rgba(190, 122, 23, 0.42);
+  background: rgba(190, 122, 23, 0.14);
+}
+
+.sidebar-status-pill.is-offline {
+  border-color: rgba(182, 67, 50, 0.42);
+  background: rgba(182, 67, 50, 0.14);
+}
+
+.sidebar-mini-list {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.sidebar-mini-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.9rem;
+  padding: 0.8rem 0.85rem;
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.sidebar-mini-item strong {
+  display: block;
+  color: #fff7e8;
+}
+
+.sidebar-mini-meta {
+  text-align: right;
 }
 
 .nav-link {
@@ -136,6 +249,17 @@ img {
   padding: 1rem;
   border-radius: 1.1rem;
   background: rgba(255, 255, 255, 0.07);
+}
+
+.sidebar .ghost-button {
+  color: #fff7e8;
+  border-color: rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.sidebar .ghost-button:hover {
+  border-color: rgba(255, 255, 255, 0.24);
+  background: rgba(255, 255, 255, 0.12);
 }
 
 .app-main {
@@ -161,6 +285,12 @@ img {
 
 .status-banner-live {
   background: rgba(31, 143, 99, 0.08);
+  border-color: rgba(31, 143, 99, 0.18);
+}
+
+.status-banner-preview {
+  background: rgba(190, 122, 23, 0.08);
+  border-color: rgba(190, 122, 23, 0.2);
 }
 
 .status-banner-error {
@@ -307,6 +437,11 @@ img {
 .vehicle-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.7fr) minmax(340px, 1fr);
+  gap: 1rem;
+}
+
+.dashboard-main {
+  display: grid;
   gap: 1rem;
 }
 
@@ -612,11 +747,211 @@ textarea:focus {
   white-space: nowrap;
 }
 
+/* ── Scraping progress banner ──────────────────────────────────── */
+.scrape-banner {
+  margin-bottom: 1rem;
+  padding: 1rem 1.2rem 0.9rem;
+  border-radius: var(--radius-lg);
+  background: linear-gradient(135deg, rgba(13, 94, 99, 0.12), rgba(13, 94, 99, 0.05));
+  border: 1.5px solid rgba(13, 94, 99, 0.28);
+}
+
+.scrape-banner-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.scrape-banner-pulse {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--brand);
+  flex-shrink: 0;
+  animation: pulse-dot 1.4s ease-in-out infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.45; transform: scale(0.8); }
+}
+
+.scrape-banner-header strong {
+  color: var(--brand-strong);
+}
+
+.scrape-banner-source {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.scrape-banner-elapsed {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 0.88rem;
+  color: var(--brand-strong);
+  font-weight: 500;
+}
+
+.scrape-banner-estimate {
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
+/* Indeterminate progress bar */
+.progress-bar {
+  height: 5px;
+  border-radius: 99px;
+  background: rgba(13, 94, 99, 0.14);
+  overflow: hidden;
+  margin-bottom: 0.65rem;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  width: 38%;
+  border-radius: 99px;
+  background: linear-gradient(90deg, var(--brand), var(--brand-strong));
+  animation: progress-slide 1.7s ease-in-out infinite;
+  transform-origin: left center;
+}
+
+@keyframes progress-slide {
+  0%   { transform: translateX(-100%) scaleX(1); }
+  50%  { transform: translateX(160%) scaleX(1.4); }
+  100% { transform: translateX(400%) scaleX(1); }
+}
+
+.scrape-banner-note {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+/* ── Error alert ────────────────────────────────────────────────── */
+.error-alert {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  padding: 1rem 1.1rem;
+  border-radius: var(--radius-lg);
+  background: rgba(182, 67, 50, 0.07);
+  border: 1.5px solid rgba(182, 67, 50, 0.22);
+}
+
+.error-alert-body {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  color: var(--red);
+}
+
+.error-alert-body strong {
+  display: block;
+  margin-bottom: 0.2rem;
+  color: var(--red);
+}
+
+.error-alert-body p {
+  margin: 0;
+  color: var(--text);
+  font-size: 0.92rem;
+}
+
+.error-alert-dismiss {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: none;
+  border-radius: 0.5rem;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: background-color 150ms ease, color 150ms ease;
+}
+
+.error-alert-dismiss:hover {
+  background: rgba(182, 67, 50, 0.1);
+  color: var(--red);
+}
+
+/* ── Info banner (demo mode notice) ────────────────────────────── */
+.info-banner {
+  margin-bottom: 1rem;
+  padding: 0.85rem 1rem;
+  border-radius: var(--radius-md);
+  background: rgba(41, 94, 168, 0.07);
+  border: 1px solid rgba(41, 94, 168, 0.18);
+  color: var(--blue);
+  font-size: 0.9rem;
+}
+
+.info-banner strong {
+  color: var(--blue);
+}
+
+/* ── Admin page layout ──────────────────────────────────────────── */
+.admin-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(0, 1.5fr) minmax(320px, 1fr);
+}
+
+.scraper-control-list {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.scraper-control-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  padding: 1rem 1.1rem;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.65);
+  border: 1px solid var(--line);
+}
+
+.scraper-control-row p {
+  margin: 0.2rem 0 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.scraper-control-row strong {
+  font-size: 0.95rem;
+}
+
+.scraper-control-row--primary {
+  background: rgba(13, 94, 99, 0.05);
+  border-color: rgba(13, 94, 99, 0.18);
+}
+
+.scraper-control-row button {
+  flex-shrink: 0;
+  min-width: 10rem;
+}
+
+.scraper-control-row button.is-active-scrape {
+  opacity: 0.7;
+  cursor: default;
+}
+
 @media (max-width: 1180px) {
   .app-shell,
   .login-page,
   .dashboard-grid,
-  .vehicle-grid {
+  .vehicle-grid,
+  .admin-grid {
     grid-template-columns: 1fr;
   }
 
@@ -628,6 +963,10 @@ textarea:focus {
 
   .sidebar-nav {
     grid-template-columns: repeat(5, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .sidebar-panel {
     width: 100%;
   }
 
@@ -659,11 +998,19 @@ textarea:focus {
   .queue-main,
   .health-row,
   .decision-row,
-  .section-head {
+  .sidebar-mini-item,
+  .section-head,
+  .scraper-control-row {
     flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .scraper-control-row button {
+    width: 100%;
   }
 
   .kpi-grid,
+  .sidebar-status-grid,
   .spec-grid {
     grid-template-columns: 1fr;
   }
