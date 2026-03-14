@@ -1,35 +1,68 @@
 import type { ComparableListing, Vehicle } from '../../src/types.js';
+import type { RawScrapedListing } from './rawTypes.js';
 import { dismissConsent, gotoWithRetry, withBrowserContext } from '../lib/browser.js';
 import { scoreComparable } from '../lib/matching.js';
-import { cleanText, extractStyleUrl, parseCurrency, parseNumber, safeModelSlug, slugify } from '../lib/parse.js';
+import { extractStyleUrl, parseCurrency, parseNumber, safeModelSlug, slugify } from '../lib/parse.js';
+
+// Maximum number of raw results fetched from a single make/model search page.
+const RAW_POOL_SIZE = 50;
 
 interface SearchOptions {
   maxResults: number;
 }
 
-export async function scrapeCarsIrelandComparables(
-  vehicle: Vehicle,
-  options: SearchOptions,
-): Promise<ComparableListing[]> {
+function parseFuelAndTransmission(variant: string): { fuel: string; transmission: string } {
+  const v = variant.toLowerCase();
+  let fuel = 'Unknown';
+  let transmission = 'Unknown';
+
+  if (v.includes('tdi') || v.includes('diesel')) {
+    fuel = 'Diesel';
+  } else if (v.includes('tsi') || v.includes('tfsi') || v.includes('petrol')) {
+    fuel = 'Petrol';
+  } else if (v.includes('hybrid') || v.includes('phev')) {
+    fuel = 'Hybrid';
+  } else if (v.includes('electric') || v.includes('ev')) {
+    fuel = 'Electric';
+  }
+
+  if (
+    v.includes('automatic') ||
+    v.includes('auto') ||
+    v.includes('dsg') ||
+    v.includes('s-tronic')
+  ) {
+    transmission = 'Automatic';
+  } else if (v.includes('manual')) {
+    transmission = 'Manual';
+  }
+
+  return { fuel, transmission };
+}
+
+/**
+ * Scrape the CarsIreland search page for a given make/model and return raw,
+ * un-scored listings. Call this once per unique (make, model) combination
+ * rather than once per vehicle.
+ */
+export async function scrapeCarsIrelandMakeModel(make: string, model: string): Promise<RawScrapedListing[]> {
   return withBrowserContext(async (_context, page) => {
-    const searchUrl = `https://www.carsireland.ie/used-cars/${slugify(vehicle.make)}/${safeModelSlug(vehicle.model)}`;
+    const searchUrl = `https://www.carsireland.ie/used-cars/${slugify(make)}/${safeModelSlug(model)}`;
     await gotoWithRetry(page, searchUrl, { waitUntil: 'domcontentloaded', timeout: 90000 });
     await dismissConsent(page);
-    // Allow JS content and any consent overlays to settle
     await page.waitForTimeout(2000);
 
     const selectorFound = await page
       .waitForSelector('a[href*="journey=Search"], a[href*="journey=FeaturedListing"]', { timeout: 60000 })
       .then(() => true)
       .catch(() => false);
+
     if (!selectorFound) {
       const pageTitle = await page.title().catch(() => 'unknown');
-      const pageUrl = page.url();
-      console.warn(`[CarsIreland] Selector not found. Page title: "${pageTitle}" | URL: ${pageUrl}`);
+      console.warn(`[CarsIreland] Selector not found for ${make} ${model}. Page title: "${pageTitle}" | URL: ${page.url()}`);
       return [];
     }
 
-    // Use string-based evaluation to avoid tsx transpilation issues
     const evalScript = `
       (function(sourceUrl) {
         function text(node) {
@@ -50,16 +83,14 @@ export async function scrapeCarsIrelandComparables(
             var mileage = text(anchor.querySelector('.cids-o-listing-card__details__vehicle-info__vehicle-mileage'));
             var location = text(anchor.querySelector('.cids-o-listing-card__details__location-and-save-container__location'));
 
-            // Extract price - need to get just the first price value, not monthly payment
             var pricingElement = anchor.querySelector('.cids-o-listing-card__details__pricing > span');
             var priceText = '';
             if (pricingElement && pricingElement.childNodes && pricingElement.childNodes.length > 0) {
-              // Get the first text node which contains the main price
               var firstTextNode = pricingElement.childNodes[0];
               priceText = firstTextNode && firstTextNode.textContent ? firstTextNode.textContent.trim() : '';
             }
             if (!priceText) {
-              priceText = text(pricingElement).split(/\s+/)[0] || ''; // Fallback: take first word
+              priceText = text(pricingElement).split(/\\s+/)[0] || '';
             }
 
             var colour = text(anchor.querySelector('.cids-o-listing-card__details__vehicle-color__color-text'));
@@ -85,7 +116,124 @@ export async function scrapeCarsIrelandComparables(
       })("${searchUrl.replace(/"/g, '\\"')}")
     `;
     const rawListings = (await page.evaluate(evalScript)) as any[];
+    const scrapedAt = new Date().toISOString();
 
+    const results: RawScrapedListing[] = [];
+
+    for (const [index, listing] of rawListings.entries()) {
+      if (!listing.href || !listing.title) continue;
+      if (results.length >= RAW_POOL_SIZE) break;
+
+      const normalizedHref = new URL(listing.href, listing.sourceUrl).href;
+      const listingIdMatch = normalizedHref.match(/\/?(\d+)\?/);
+      const variant = listing.paragraphs[0] ?? '';
+      const { fuel, transmission } = parseFuelAndTransmission(variant);
+
+      results.push({
+        source: 'carsireland',
+        listingId: listingIdMatch?.[1] ?? String(index),
+        listingUrl: normalizedHref,
+        title: listing.title,
+        make,
+        model,
+        variant,
+        year: listing.year ? Number.parseInt(listing.year, 10) : 0,
+        mileageKm: parseNumber(listing.mileage),
+        fuel,
+        transmission,
+        bodyType: 'Unknown',
+        engineLitres: undefined,
+        price: parseCurrency(listing.priceText),
+        dealerName: 'Dealer listing',
+        dealerLocation: listing.location || 'Unknown',
+        imageUrl: extractStyleUrl(listing.imageStyle),
+        scrapedAt,
+      });
+    }
+
+    return results;
+  });
+}
+
+/**
+ * Legacy per-vehicle scraper — kept for the sequential fallback path in service.ts.
+ * Prefer scrapeCarsIrelandMakeModel() + per-vehicle scoring for bulk operations.
+ */
+export async function scrapeCarsIrelandComparables(
+  vehicle: Vehicle,
+  options: SearchOptions,
+): Promise<ComparableListing[]> {
+  return withBrowserContext(async (_context, page) => {
+    const searchUrl = `https://www.carsireland.ie/used-cars/${slugify(vehicle.make)}/${safeModelSlug(vehicle.model)}`;
+    await gotoWithRetry(page, searchUrl, { waitUntil: 'domcontentloaded', timeout: 90000 });
+    await dismissConsent(page);
+    await page.waitForTimeout(2000);
+
+    const selectorFound = await page
+      .waitForSelector('a[href*="journey=Search"], a[href*="journey=FeaturedListing"]', { timeout: 60000 })
+      .then(() => true)
+      .catch(() => false);
+
+    if (!selectorFound) {
+      const pageTitle = await page.title().catch(() => 'unknown');
+      const pageUrl = page.url();
+      console.warn(`[CarsIreland] Selector not found. Page title: "${pageTitle}" | URL: ${pageUrl}`);
+      return [];
+    }
+
+    const evalScript = `
+      (function(sourceUrl) {
+        function text(node) {
+          var content = node && node.textContent ? node.textContent : '';
+          return content.replace(/\\s+/g, ' ').trim();
+        }
+
+        return Array.from(document.querySelectorAll('a[href*="journey=Search"], a[href*="journey=FeaturedListing"]')).map(
+          function(anchor) {
+            var title = text(anchor.querySelector('h3'));
+
+            var paragraphs = Array.from(anchor.querySelectorAll('p')).map(function(node) {
+              return text(node);
+            }).filter(Boolean);
+
+            var year = text(anchor.querySelector('.cids-o-listing-card__details__vehicle-info__vehicle-year h3'));
+            var reg = text(anchor.querySelector('.cids-o-listing-card__details__vehicle-info__vehicle-reg-detail'));
+            var mileage = text(anchor.querySelector('.cids-o-listing-card__details__vehicle-info__vehicle-mileage'));
+            var location = text(anchor.querySelector('.cids-o-listing-card__details__location-and-save-container__location'));
+
+            var pricingElement = anchor.querySelector('.cids-o-listing-card__details__pricing > span');
+            var priceText = '';
+            if (pricingElement && pricingElement.childNodes && pricingElement.childNodes.length > 0) {
+              var firstTextNode = pricingElement.childNodes[0];
+              priceText = firstTextNode && firstTextNode.textContent ? firstTextNode.textContent.trim() : '';
+            }
+            if (!priceText) {
+              priceText = text(pricingElement).split(/\\s+/)[0] || '';
+            }
+
+            var colour = text(anchor.querySelector('.cids-o-listing-card__details__vehicle-color__color-text'));
+
+            var imgElem = anchor.querySelector('.cids-o-listing-card__images__main__image');
+            var imageStyle = imgElem && imgElem.style && imgElem.style.backgroundImage ? imgElem.style.backgroundImage : '';
+
+            return {
+              href: anchor.getAttribute ? anchor.getAttribute('href') || '' : '',
+              title: title,
+              paragraphs: paragraphs,
+              year: year,
+              reg: reg,
+              mileage: mileage,
+              location: location,
+              priceText: priceText,
+              colour: colour,
+              imageStyle: imageStyle,
+              sourceUrl: sourceUrl
+            };
+          }
+        );
+      })("${searchUrl.replace(/"/g, '\\"')}")
+    `;
+    const rawListings = (await page.evaluate(evalScript)) as any[];
     const scrapedAt = new Date().toISOString();
 
     return rawListings
@@ -94,29 +242,7 @@ export async function scrapeCarsIrelandComparables(
         const normalizedHref = new URL(listing.href, listing.sourceUrl).href;
         const listingIdMatch = normalizedHref.match(/\/?(\d+)\?/);
         const variant = listing.paragraphs[0] ?? '';
-
-        // Try to extract fuel type from variant/description
-        let fuel = 'Unknown';
-        let transmission = 'Unknown';
-        const variantLower = variant.toLowerCase();
-
-        // Fuel type detection
-        if (variantLower.includes('tdi') || variantLower.includes('diesel')) {
-          fuel = 'Diesel';
-        } else if (variantLower.includes('tsi') || variantLower.includes('tfsi') || variantLower.includes('petrol')) {
-          fuel = 'Petrol';
-        } else if (variantLower.includes('hybrid') || variantLower.includes('phev')) {
-          fuel = 'Hybrid';
-        } else if (variantLower.includes('electric') || variantLower.includes('ev')) {
-          fuel = 'Electric';
-        }
-
-        // Transmission detection
-        if (variantLower.includes('automatic') || variantLower.includes('auto') || variantLower.includes('dsg') || variantLower.includes('s-tronic')) {
-          transmission = 'Automatic';
-        } else if (variantLower.includes('manual')) {
-          transmission = 'Manual';
-        }
+        const { fuel, transmission } = parseFuelAndTransmission(variant);
 
         const comparable: ComparableListing = {
           id: `carsireland-${listingIdMatch?.[1] ?? index}`,

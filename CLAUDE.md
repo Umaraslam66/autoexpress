@@ -1,3 +1,7 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
 # AutoXpress Pricing Intelligence Platform
 
 ## Project Overview
@@ -432,14 +436,23 @@ npm run dev
 npm run dev              # Vite frontend dev server
 npm run dev:server       # Backend API with hot reload (tsx watch)
 npm run dev:worker       # Background worker with hot reload
-npm run build            # Production build (TS compile + Vite + Playwright install)
-npm run start            # Run production API
+npm run build            # Production build: prisma generate + tsc (frontend) + tsc (server) + vite build + playwright install chromium
+npm run start            # Run production API (dist-server/server/index.js)
+npm run start:web        # Railway production: db push --accept-data-loss then start API
 npm run start:worker     # Run production worker
 npm run db:generate      # prisma generate
 npm run db:push          # prisma db push
 npm run db:migrate       # prisma migrate deploy
 npm run db:seed          # tsx prisma/seed.ts
 ```
+
+### Type Checking
+```bash
+npx tsc -b --noEmit                        # Check frontend TypeScript
+npx tsc -p tsconfig.server.json --noEmit   # Check backend TypeScript
+```
+
+> There are no tests and no ESLint configured in this project.
 
 ---
 
