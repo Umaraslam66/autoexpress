@@ -35,6 +35,11 @@ interface AppStateValue {
   pricingDecisions: Record<string, PricingDecision>;
   excludedComparables: Record<string, string[]>;
   pricingFiles: PricingFileRecord[];
+  /** Which scrape source is currently running ('all' | 'autoxpress' | 'carzone' | 'carsireland' | null) */
+  scrapingSource: string | null;
+  /** ISO timestamp when the current scrape started, for elapsed-time display */
+  scrapingStartedAt: string | null;
+  dismissError: () => void;
   login: (email: string, password: string) => Promise<boolean>;
   logout: () => Promise<void>;
   savePricingDecision: (vehicleId: string, input: PricingDecisionCreateInput) => Promise<void>;
@@ -99,6 +104,8 @@ export function AppStateProvider({ children }: PropsWithChildren) {
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [activeUser, setActiveUser] = useState<AppUser | null>(null);
+  const [scrapingSource, setScrapingSource] = useState<string | null>(null);
+  const [scrapingStartedAt, setScrapingStartedAt] = useState<string | null>(null);
 
   async function loadBootstrap(user: AppUser | null) {
     if (!user) {
@@ -154,6 +161,9 @@ export function AppStateProvider({ children }: PropsWithChildren) {
       pricingDecisions: dataState.pricingDecisions,
       excludedComparables: dataState.excludedComparables,
       pricingFiles: dataState.pricingFiles,
+      scrapingSource,
+      scrapingStartedAt,
+      dismissError: () => setSyncError(null),
       login: async (email, password) => {
         try {
           const payload = await fetchJson<{ user: AppUser }>('/api/auth/login', {
@@ -222,14 +232,24 @@ export function AppStateProvider({ children }: PropsWithChildren) {
           setSyncError('Demo mode is active. Live source refresh is disabled in this environment.');
           return;
         }
-        await fetchJson('/api/admin/refresh', {
-          method: 'POST',
-          body: JSON.stringify({ source }),
-        });
-        await refresh();
+        setScrapingSource(source);
+        setScrapingStartedAt(new Date().toISOString());
+        setSyncError(null);
+        try {
+          await fetchJson('/api/admin/refresh', {
+            method: 'POST',
+            body: JSON.stringify({ source }),
+          });
+          await refresh();
+        } catch (error) {
+          setSyncError(error instanceof Error ? error.message : 'Scrape failed — check the job history for details.');
+        } finally {
+          setScrapingSource(null);
+          setScrapingStartedAt(null);
+        }
       },
     }),
-    [activeUser, dataState, isSyncing, syncError],
+    [activeUser, dataState, isSyncing, syncError, scrapingSource, scrapingStartedAt],
   );
 
   return <AppStateContext.Provider value={value}>{children}</AppStateContext.Provider>;
