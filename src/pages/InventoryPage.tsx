@@ -1,10 +1,15 @@
 import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { AppShell } from '../components/layout/AppShell';
 import { Badge } from '../components/ui/Badge';
 import { SectionCard } from '../components/ui/SectionCard';
 import { useAppState } from '../context/AppState';
 import type { VehicleFilterState } from '../types';
+import {
+  DASHBOARD_VEHICLE_FILTERS,
+  isDashboardVehicleFilter,
+  matchesDashboardVehicleFilter,
+} from '../utils/dashboardFilters';
 import { exportInventoryCsv } from '../utils/csv';
 import { formatCurrency, formatDate, formatNumber } from '../utils/format';
 import { buildVehicleInsights } from '../utils/vehicleAnalysis';
@@ -22,6 +27,7 @@ const defaultFilters: VehicleFilterState = {
 
 export function InventoryPage() {
   const state = useAppState();
+  const [searchParams, setSearchParams] = useSearchParams();
   const insights = buildVehicleInsights(
     state.vehicles,
     state.comparableListings,
@@ -30,6 +36,21 @@ export function InventoryPage() {
     state.pricingFiles,
   );
   const [filters, setFilters] = useState<VehicleFilterState>(defaultFilters);
+  const dashboardFilterParam = searchParams.get('dashboardFilter');
+  const dashboardFilter = isDashboardVehicleFilter(dashboardFilterParam) ? dashboardFilterParam : null;
+  const activeDashboardFilter = dashboardFilter ? DASHBOARD_VEHICLE_FILTERS[dashboardFilter] : null;
+
+  function updateDashboardFilter(value: string) {
+    const nextSearchParams = new URLSearchParams(searchParams);
+
+    if (value && isDashboardVehicleFilter(value)) {
+      nextSearchParams.set('dashboardFilter', value);
+    } else {
+      nextSearchParams.delete('dashboardFilter');
+    }
+
+    setSearchParams(nextSearchParams);
+  }
 
   const filtered = useMemo(() => {
     return insights.filter((insight) => {
@@ -46,8 +67,10 @@ export function InventoryPage() {
         (filters.priceBand === 'sub20' && insight.vehicle.price < 20000) ||
         (filters.priceBand === '20to30' && insight.vehicle.price >= 20000 && insight.vehicle.price <= 30000) ||
         (filters.priceBand === '30plus' && insight.vehicle.price > 30000);
+      const dashboardMatch = !dashboardFilter || matchesDashboardVehicleFilter(insight, dashboardFilter);
 
       return (
+        dashboardMatch &&
         queryMatch &&
         makeMatch &&
         fuelMatch &&
@@ -58,7 +81,7 @@ export function InventoryPage() {
         priceMatch
       );
     });
-  }, [filters, insights]);
+  }, [dashboardFilter, filters, insights]);
 
   const makes = Array.from(new Set(state.vehicles.map((vehicle) => vehicle.make)));
   const bodyTypes = Array.from(new Set(state.vehicles.map((vehicle) => vehicle.bodyType)));
@@ -73,8 +96,31 @@ export function InventoryPage() {
         </button>
       }
     >
+      {activeDashboardFilter ? (
+        <div className={`inventory-filter-banner inventory-filter-banner-${activeDashboardFilter.tone}`}>
+          <div>
+            <strong>{activeDashboardFilter.label}</strong>
+            <span>Showing vehicles from the dashboard selection.</span>
+          </div>
+          <button type="button" className="ghost-button" onClick={() => updateDashboardFilter('')}>
+            Clear filter
+          </button>
+        </div>
+      ) : null}
+
       <SectionCard title="Filters" description="Filter by make, model, fuel type, or pricing position.">
         <div className="filter-grid">
+          <label>
+            Dashboard filter
+            <select value={dashboardFilter ?? ''} onChange={(event) => updateDashboardFilter(event.target.value)}>
+              <option value="">All vehicles</option>
+              {Object.entries(DASHBOARD_VEHICLE_FILTERS).map(([value, config]) => (
+                <option key={value} value={value}>
+                  {config.label}
+                </option>
+              ))}
+            </select>
+          </label>
           <label>
             Search
             <input
@@ -227,4 +273,3 @@ export function InventoryPage() {
     </AppShell>
   );
 }
-

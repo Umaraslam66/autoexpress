@@ -402,6 +402,16 @@ img {
   min-height: 11rem;
 }
 
+.kpi-card-link {
+  display: block;
+  transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
+}
+
+.kpi-card-link:hover {
+  transform: translateY(-3px);
+  border-color: rgba(13, 94, 99, 0.22);
+}
+
 .kpi-label,
 .summary-stack span,
 .queue-metrics span,
@@ -572,6 +582,43 @@ img {
   gap: 0.45rem;
   color: var(--muted);
   font-size: 0.88rem;
+}
+
+.inventory-filter-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  padding: 1rem 1.1rem;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--line);
+  background: rgba(20, 32, 45, 0.05);
+}
+
+.inventory-filter-banner strong,
+.inventory-filter-banner span {
+  display: block;
+}
+
+.inventory-filter-banner span {
+  margin-top: 0.2rem;
+  color: var(--muted);
+}
+
+.inventory-filter-banner-success {
+  background: rgba(31, 143, 99, 0.09);
+  border-color: rgba(31, 143, 99, 0.18);
+}
+
+.inventory-filter-banner-warning {
+  background: rgba(190, 122, 23, 0.1);
+  border-color: rgba(190, 122, 23, 0.2);
+}
+
+.inventory-filter-banner-danger {
+  background: rgba(182, 67, 50, 0.09);
+  border-color: rgba(182, 67, 50, 0.18);
 }
 
 input,
@@ -996,6 +1043,7 @@ textarea:focus {
 
   .page-head,
   .queue-main,
+  .inventory-filter-banner,
   .health-row,
   .decision-row,
   .sidebar-mini-item,

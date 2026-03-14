@@ -4,40 +4,9 @@ import { Badge } from '../components/ui/Badge';
 import { KpiCard } from '../components/ui/KpiCard';
 import { SectionCard } from '../components/ui/SectionCard';
 import { useAppState } from '../context/AppState';
-import { formatCurrency, median } from '../utils/format';
-import { buildVehicleInsights, type VehicleInsight } from '../utils/vehicleAnalysis';
-
-type DashboardRiskBand = 'green' | 'amber' | 'red';
-
-function getMarketReferencePrice(insight: VehicleInsight): number | null {
-  return insight.pricing.suggestedTarget ?? insight.pricing.marketMedian ?? insight.finalTarget ?? null;
-}
-
-function getComparableMileageDelta(insight: VehicleInsight): number | null {
-  const comparableMileage = median(insight.pricing.includedComparables.map((listing) => listing.mileageKm));
-
-  if (comparableMileage === null) {
-    return null;
-  }
-
-  return Math.abs(insight.vehicle.mileageKm - comparableMileage);
-}
-
-function getDashboardRiskBand(insight: VehicleInsight): DashboardRiskBand {
-  const referencePrice = getMarketReferencePrice(insight);
-  const comparableMileageDelta = getComparableMileageDelta(insight);
-
-  if (referencePrice === null || comparableMileageDelta === null) {
-    return 'amber';
-  }
-
-  const priceDelta = Math.max(0, insight.vehicle.price - referencePrice);
-  const priceSeverity = priceDelta <= 300 ? 0 : priceDelta <= 800 ? 1 : 2;
-  const mileageSeverity = comparableMileageDelta <= 10000 ? 0 : comparableMileageDelta <= 20000 ? 1 : 2;
-  const severity = Math.max(priceSeverity, mileageSeverity);
-
-  return severity === 0 ? 'green' : severity === 1 ? 'amber' : 'red';
-}
+import { formatCurrency } from '../utils/format';
+import { buildVehicleInsights } from '../utils/vehicleAnalysis';
+import { matchesDashboardVehicleFilter } from '../utils/dashboardFilters';
 
 export function DashboardPage() {
   const state = useAppState();
@@ -49,13 +18,9 @@ export function DashboardPage() {
     state.pricingFiles,
   );
 
-  const bandedInsights = insights.map((insight) => ({
-    insight,
-    band: getDashboardRiskBand(insight),
-  }));
-  const marketAligned = bandedInsights.filter(({ band }) => band === 'green');
-  const vehiclesNeedingReview = bandedInsights.filter(({ band }) => band === 'amber');
-  const aboveMarket = bandedInsights.filter(({ band }) => band === 'red');
+  const marketAligned = insights.filter((insight) => matchesDashboardVehicleFilter(insight, 'market_aligned'));
+  const vehiclesNeedingReview = insights.filter((insight) => matchesDashboardVehicleFilter(insight, 'need_review'));
+  const aboveMarket = insights.filter((insight) => matchesDashboardVehicleFilter(insight, 'above_market'));
   const belowMarket = insights.filter((insight) => insight.pricing.currentPosition === 'below_market');
 
   return (
@@ -74,30 +39,39 @@ export function DashboardPage() {
       }
     >
       <section className="kpi-grid">
-        <KpiCard label="In-stock vehicles" value={String(insights.length)} detail="Active units in the current AutoXpress inventory." />
+        <KpiCard
+          label="In-stock vehicles"
+          value={String(insights.length)}
+          detail="Active units in the current AutoXpress inventory."
+          to="/inventory?dashboardFilter=all"
+        />
         <KpiCard
           label="Market aligned"
           value={String(marketAligned.length)}
           detail="Up to EUR 300 over target and up to 10,000km from comp median."
           tone="success"
+          to="/inventory?dashboardFilter=market_aligned"
         />
         <KpiCard
           label="Need review"
           value={String(vehiclesNeedingReview.length)}
           detail="EUR 301-800 over target or 10,001-20,000km from comp median."
           tone="warning"
+          to="/inventory?dashboardFilter=need_review"
         />
         <KpiCard
           label="Above market risk"
           value={String(aboveMarket.length)}
           detail="EUR 801+ over target or 20,001km+ from comp median."
           tone="danger"
+          to="/inventory?dashboardFilter=above_market"
         />
         <KpiCard
           label="Below market"
           value={String(belowMarket.length)}
           detail="Units priced below adjusted market target."
           tone="success"
+          to="/inventory?dashboardFilter=below_market"
         />
       </section>
 
