@@ -100,6 +100,22 @@ img {
   gap: 0.9rem;
 }
 
+.sidebar-brand > div,
+.sidebar-user > div {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.sidebar-brand strong,
+.sidebar-user strong {
+  color: #fff7e8;
+}
+
+.sidebar-brand span,
+.sidebar-user span {
+  color: rgba(249, 241, 222, 0.72);
+}
+
 .brand-mark {
   display: inline-flex;
   align-items: center;
@@ -115,6 +131,103 @@ img {
 .sidebar-nav {
   display: grid;
   gap: 0.55rem;
+}
+
+.sidebar-panel {
+  display: grid;
+  gap: 1rem;
+  padding: 1rem;
+  border-radius: 1.25rem;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.04)),
+    rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.sidebar-panel-head {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.sidebar-panel-head strong {
+  color: #fff7e8;
+}
+
+.sidebar-panel-head span,
+.sidebar-empty,
+.sidebar-mini-item span {
+  color: rgba(249, 241, 222, 0.72);
+}
+
+.sidebar-panel-head-compact {
+  gap: 0;
+}
+
+.sidebar-status-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+.sidebar-status-pill {
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.75rem 0.85rem;
+  border-radius: 1rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.sidebar-status-pill span {
+  color: rgba(249, 241, 222, 0.7);
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.sidebar-status-pill strong {
+  color: #fff7e8;
+  font-size: 0.95rem;
+  text-transform: capitalize;
+}
+
+.sidebar-status-pill.is-healthy {
+  border-color: rgba(31, 143, 99, 0.4);
+  background: rgba(31, 143, 99, 0.12);
+}
+
+.sidebar-status-pill.is-degraded {
+  border-color: rgba(190, 122, 23, 0.42);
+  background: rgba(190, 122, 23, 0.14);
+}
+
+.sidebar-status-pill.is-offline {
+  border-color: rgba(182, 67, 50, 0.42);
+  background: rgba(182, 67, 50, 0.14);
+}
+
+.sidebar-mini-list {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.sidebar-mini-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.9rem;
+  padding: 0.8rem 0.85rem;
+  border-radius: 1rem;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.sidebar-mini-item strong {
+  display: block;
+  color: #fff7e8;
+}
+
+.sidebar-mini-meta {
+  text-align: right;
 }
 
 .nav-link {
@@ -136,6 +249,17 @@ img {
   padding: 1rem;
   border-radius: 1.1rem;
   background: rgba(255, 255, 255, 0.07);
+}
+
+.sidebar .ghost-button {
+  color: #fff7e8;
+  border-color: rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.sidebar .ghost-button:hover {
+  border-color: rgba(255, 255, 255, 0.24);
+  background: rgba(255, 255, 255, 0.12);
 }
 
 .app-main {
@@ -313,6 +437,11 @@ img {
 .vehicle-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.7fr) minmax(340px, 1fr);
+  gap: 1rem;
+}
+
+.dashboard-main {
+  display: grid;
   gap: 1rem;
 }
 
@@ -837,6 +966,10 @@ textarea:focus {
     width: 100%;
   }
 
+  .sidebar-panel {
+    width: 100%;
+  }
+
   .sidebar-user {
     margin-top: 0;
     width: 100%;
@@ -865,6 +998,7 @@ textarea:focus {
   .queue-main,
   .health-row,
   .decision-row,
+  .sidebar-mini-item,
   .section-head,
   .scraper-control-row {
     flex-direction: column;
@@ -876,6 +1010,7 @@ textarea:focus {
   }
 
   .kpi-grid,
+  .sidebar-status-grid,
   .spec-grid {
     grid-template-columns: 1fr;
   }
