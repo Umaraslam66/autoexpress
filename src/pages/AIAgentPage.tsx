@@ -313,31 +313,68 @@ function LoadingDots() {
   );
 }
 
-// Simple markdown-lite renderer: handles **bold**, `code`, and newlines
+// ─── Markdown-lite renderer ────────────────────────────────────────────────────
+// Handles: ### ## headings, * - bullet lists, **bold**, *italic*, `code`, newlines
+
+function parseInline(text: string): React.ReactNode[] {
+  const parts = text.split(/(\*\*[^*]+\*\*|\*[^*\n]+\*|`[^`]+`)/g);
+  return parts.map((part, i) => {
+    if (part.startsWith('**') && part.endsWith('**')) {
+      return <strong key={i}>{part.slice(2, -2)}</strong>;
+    }
+    if (part.startsWith('*') && part.endsWith('*') && part.length > 2) {
+      return <em key={i}>{part.slice(1, -1)}</em>;
+    }
+    if (part.startsWith('`') && part.endsWith('`')) {
+      return (
+        <code key={i} style={{ background: 'rgba(255,255,255,0.12)', padding: '1px 6px', borderRadius: '4px', fontSize: '0.88em', fontFamily: 'monospace' }}>
+          {part.slice(1, -1)}
+        </code>
+      );
+    }
+    return part;
+  });
+}
+
 function FormattedText({ text }: { text: string }) {
   if (!text) return null;
 
   const lines = text.split('\n');
-  return (
-    <>
-      {lines.map((line, li) => {
-        // Parse **bold** and `code` inline
-        const parts = line.split(/(\*\*[^*]+\*\*|`[^`]+`)/g);
-        return (
-          <span key={li}>
-            {parts.map((part, pi) => {
-              if (part.startsWith('**') && part.endsWith('**')) {
-                return <strong key={pi}>{part.slice(2, -2)}</strong>;
-              }
-              if (part.startsWith('`') && part.endsWith('`')) {
-                return <code key={pi} style={{ background: 'rgba(255,255,255,0.1)', padding: '1px 5px', borderRadius: '4px', fontSize: '0.9em', fontFamily: 'monospace' }}>{part.slice(1, -1)}</code>;
-              }
-              return part;
-            })}
-            {li < lines.length - 1 && <br />}
-          </span>
-        );
-      })}
-    </>
-  );
+  const elements: React.ReactNode[] = [];
+  let listItems: string[] = [];
+  let key = 0;
+
+  function flushList() {
+    if (listItems.length === 0) return;
+    elements.push(
+      <ul key={key++} style={{ paddingLeft: '18px', margin: '4px 0 8px', lineHeight: 1.6 }}>
+        {listItems.map((item, i) => <li key={i}>{parseInline(item)}</li>)}
+      </ul>,
+    );
+    listItems = [];
+  }
+
+  for (const line of lines) {
+    if (line.startsWith('### ')) {
+      flushList();
+      elements.push(<p key={key++} style={{ fontWeight: 700, fontSize: '14px', margin: '12px 0 4px', opacity: 0.95 }}>{parseInline(line.slice(4))}</p>);
+    } else if (line.startsWith('## ')) {
+      flushList();
+      elements.push(<p key={key++} style={{ fontWeight: 700, fontSize: '15px', margin: '14px 0 4px' }}>{parseInline(line.slice(3))}</p>);
+    } else if (line.startsWith('# ')) {
+      flushList();
+      elements.push(<p key={key++} style={{ fontWeight: 700, fontSize: '16px', margin: '14px 0 6px' }}>{parseInline(line.slice(2))}</p>);
+    } else if (/^[*-] /.test(line)) {
+      listItems.push(line.slice(2));
+    } else if (line === '') {
+      flushList();
+      elements.push(<br key={key++} />);
+    } else {
+      flushList();
+      elements.push(<span key={key++} style={{ display: 'block' }}>{parseInline(line)}</span>);
+    }
+  }
+
+  flushList();
+  return <>{elements}</>;
 }
