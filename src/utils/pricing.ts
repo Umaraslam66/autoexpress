@@ -65,7 +65,7 @@ export function computePricing(
     const priceDistance = Math.abs(listing.price - baseMedian) / baseMedian;
     const mileageDistance = Math.abs(listing.mileageKm - vehicle.mileageKm);
     const yearDistance = Math.abs(listing.year - vehicle.year);
-    return priceDistance <= 0.18 && mileageDistance <= 80000 && yearDistance <= 3;
+    return priceDistance <= 0.18 && mileageDistance <= 80000 && yearDistance <= 1;
   });
 
   const filteredOutliers = eligible.filter((listing) => !filtered.includes(listing));
