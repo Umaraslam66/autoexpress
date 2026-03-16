@@ -1,6 +1,7 @@
 import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
 import { useAppState } from './context/AppState';
 import { AdminPage } from './pages/AdminPage';
+import { AIAgentPage } from './pages/AIAgentPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { InventoryPage } from './pages/InventoryPage';
 import { LoginPage } from './pages/LoginPage';
@@ -30,6 +31,7 @@ export default function App() {
         <Route path="/vehicle/:vehicleId" element={<VehicleDetailPage />} />
         <Route path="/pricing-files" element={<PricingFilesPage />} />
         <Route path="/admin" element={<AdminPage />} />
+        <Route path="/ai" element={<AIAgentPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

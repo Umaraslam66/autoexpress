@@ -1,5 +1,6 @@
 import { NavLink, useLocation } from 'react-router-dom';
 import { useAppState } from '../../context/AppState';
+import { GlobalSearch } from '../search/GlobalSearch';
 import { average, daysBetween, formatCurrency, formatDateTime } from '../../utils/format';
 import { buildVehicleInsights } from '../../utils/vehicleAnalysis';
 
@@ -8,6 +9,7 @@ const navItems = [
   { to: '/inventory', label: 'Inventory' },
   { to: '/queue', label: 'Pricing Queue' },
   { to: '/pricing-files', label: 'Pricing Files' },
+  { to: '/ai', label: 'AI Insights' },
   { to: '/admin', label: 'Admin' },
 ];
 
@@ -40,6 +42,8 @@ export function Sidebar() {
           <span>Pricing Intelligence</span>
         </div>
       </div>
+
+      <GlobalSearch />
 
       <nav className="sidebar-nav">
         {navItems.map((item) => (

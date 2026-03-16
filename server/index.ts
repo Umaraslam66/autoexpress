@@ -19,6 +19,7 @@ import { ensureSystemSeed } from './modules/setup/service.js';
 import { enqueueSourceSync, enqueueSyncAll } from './modules/jobs/queue.js';
 import { syncAllSourcesNow, syncAutoXpressInventoryNow, syncMarketComparablesNow } from './modules/sources/service.js';
 import { getAdminImportStatuses, getAdminJobStatuses } from './modules/admin/service.js';
+import { handleAiChat } from './modules/ai/service.js';
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -204,6 +205,17 @@ async function start() {
     await requireCurrentUser(req);
     const statuses = await getAdminImportStatuses(req.session.dealershipId ?? '');
     res.json(statuses);
+  }));
+
+  const aiChatSchema = z.object({
+    messages: z.array(z.object({ role: z.enum(['user', 'assistant']), content: z.string() })).min(1),
+  });
+
+  app.post('/api/ai/chat', asyncHandler(async (req, res) => {
+    const user = await requireCurrentUser(req);
+    const { messages } = aiChatSchema.parse(req.body);
+    const result = await handleAiChat(user.id, messages);
+    res.json(result);
   }));
 
   app.post('/api/admin/refresh', asyncHandler(async (req, res) => {
