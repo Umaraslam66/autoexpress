@@ -1,11 +1,14 @@
 import { Redis } from 'ioredis';
-import { createClient } from 'redis';
 import { env, hasRedisConfig } from '../config/env.js';
 
 type BullRedisClient = InstanceType<typeof Redis>;
+type SessionRedisClient = {
+  isOpen: boolean;
+  connect: () => Promise<unknown>;
+};
 
 let bullRedis: BullRedisClient | null = null;
-let sessionRedisPromise: ReturnType<typeof createClient> | null = null;
+let sessionRedisPromise: Promise<SessionRedisClient> | null = null;
 
 export function getBullRedis(): BullRedisClient | null {
   if (!hasRedisConfig()) {
@@ -28,13 +31,15 @@ export async function getSessionRedisClient() {
   }
 
   if (!sessionRedisPromise) {
-    const client = createClient({
-      url: env.redisUrl,
+    sessionRedisPromise = import('redis').then(async ({ createClient }) => {
+      const client = createClient({
+        url: env.redisUrl,
+      }) as unknown as SessionRedisClient;
+      if (!client.isOpen) {
+        await client.connect();
+      }
+      return client;
     });
-    sessionRedisPromise = client;
-    if (!client.isOpen) {
-      await client.connect();
-    }
   }
 
   return sessionRedisPromise;

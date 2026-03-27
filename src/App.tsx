@@ -7,6 +7,8 @@ import { InventoryPage } from './pages/InventoryPage';
 import { LoginPage } from './pages/LoginPage';
 import { PricingFilesPage } from './pages/PricingFilesPage';
 import { PricingQueuePage } from './pages/PricingQueuePage';
+import { SearchPage } from './pages/SearchPage';
+import { StockTurnPage } from './pages/StockTurnPage';
 import { VehicleDetailPage } from './pages/VehicleDetailPage';
 
 function ProtectedRoutes() {
@@ -26,7 +28,9 @@ export default function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route element={<ProtectedRoutes />}>
         <Route path="/" element={<DashboardPage />} />
+        <Route path="/stock-turn" element={<StockTurnPage />} />
         <Route path="/inventory" element={<InventoryPage />} />
+        <Route path="/search" element={<SearchPage />} />
         <Route path="/queue" element={<PricingQueuePage />} />
         <Route path="/vehicle/:vehicleId" element={<VehicleDetailPage />} />
         <Route path="/pricing-files" element={<PricingFilesPage />} />
@@ -37,4 +41,3 @@ export default function App() {
     </Routes>
   );
 }
-

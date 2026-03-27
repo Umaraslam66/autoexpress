@@ -6,6 +6,7 @@ import type {
   SourceHealth,
   Vehicle,
 } from '../types.js';
+import { buildNormalizedVehicleSpec } from '../utils/normalization.js';
 
 export const users: AppUser[] = [
   {
@@ -842,6 +843,14 @@ export const sourceHealth: SourceHealth[] = [
     status: 'degraded',
     message: 'Selector drift detected on 3 listing detail pages.',
   },
+  {
+    source: 'donedeal',
+    cadence: 'Feature flagged',
+    lastSuccessAt: '2026-03-06T08:30:00.000Z',
+    freshness: 'yesterday',
+    status: 'degraded',
+    message: 'DoneDeal scraping is enabled only for controlled production tests.',
+  },
 ];
 
 export const jobRuns: JobRun[] = [
@@ -872,6 +881,15 @@ export const jobRuns: JobRun[] = [
     recordsProcessed: 11,
     message: 'Partial extraction. Selector update required for trim field.',
   },
+  {
+    id: 'job-4',
+    source: 'donedeal',
+    status: 'warning',
+    startedAt: '2026-03-06T07:40:00.000Z',
+    completedAt: '2026-03-06T08:30:00.000Z',
+    recordsProcessed: 7,
+    message: 'Pilot scrape completed with limited selector coverage.',
+  },
 ];
 
 export const normalizationRules: NormalizationRule[] = [
@@ -894,3 +912,30 @@ export const normalizationRules: NormalizationRule[] = [
     canonicalValue: 'Volkswagen',
   },
 ];
+
+for (const vehicle of vehicles) {
+  vehicle.normalizedSpec = buildNormalizedVehicleSpec({
+    make: vehicle.make,
+    model: vehicle.model,
+    variant: vehicle.variant,
+    fuel: vehicle.fuel,
+    transmission: vehicle.transmission,
+    engineLitres: vehicle.engineLitres,
+    year: vehicle.year,
+  });
+  vehicle.stockClockStartAt = vehicle.dateAdded;
+  vehicle.lastPriceChangeAt = vehicle.priceHistory[vehicle.priceHistory.length - 1]?.changedAt ?? vehicle.dateAdded;
+}
+
+for (const listing of comparableListings) {
+  listing.normalizedSpec = buildNormalizedVehicleSpec({
+    make: listing.make,
+    model: listing.model,
+    variant: listing.variant,
+    title: listing.title,
+    fuel: listing.fuel,
+    transmission: listing.transmission,
+    engineLitres: listing.engineLitres,
+    year: listing.year,
+  });
+}

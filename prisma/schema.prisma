@@ -16,6 +16,7 @@ enum SourceName {
   AUTOXPRESS
   CARZONE
   CARSIRELAND
+  DONEDEAL
 }
 
 enum InventorySourceMode {
@@ -172,6 +173,9 @@ model Vehicle {
   location       String
   vehicleUrl     String                  @map("vehicle_url")
   imageUrl       String                  @map("image_url")
+  normalizedSpecJson Json?               @map("normalized_spec_json")
+  stockClockStartAt DateTime?            @map("stock_clock_start_at")
+  lastPriceChangeAt DateTime?            @map("last_price_change_at")
   notesJson      Json?                   @map("notes_json")
   sourceRunId    String?                 @map("source_run_id")
   lastSeenAt     DateTime                @default(now()) @map("last_seen_at")
@@ -244,6 +248,7 @@ model NormalizedListing {
   listedAt       DateTime?         @map("listed_at")
   daysListed     Int               @default(0) @map("days_listed")
   imageUrl       String?           @map("image_url")
+  normalizedSpecJson Json?         @map("normalized_spec_json")
   lastSeenAt     DateTime          @default(now()) @map("last_seen_at")
   isActive       Boolean           @default(true) @map("is_active")
   normalizationStatus String       @default("normalized") @map("normalization_status")

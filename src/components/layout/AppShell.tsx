@@ -4,10 +4,11 @@ import { formatDateTime } from '../../utils/format';
 import { Sidebar } from './Sidebar';
 
 const SOURCE_LABELS: Record<string, string> = {
-  all: 'Full sync (AutoXpress + Carzone + CarsIreland)',
+  all: 'Full sync (AutoXpress + Carzone + CarsIreland + DoneDeal)',
   autoxpress: 'AutoXpress inventory',
   carzone: 'Carzone comparables',
   carsireland: 'CarsIreland comparables',
+  donedeal: 'DoneDeal comparables',
 };
 
 const SOURCE_ESTIMATES: Record<string, string> = {
@@ -15,6 +16,7 @@ const SOURCE_ESTIMATES: Record<string, string> = {
   autoxpress: '3 – 5 min',
   carzone: '8 – 12 min',
   carsireland: '8 – 12 min',
+  donedeal: '8 – 12 min',
 };
 
 function useElapsedSeconds(startedAt: string | null): number {

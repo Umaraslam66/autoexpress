@@ -5,7 +5,7 @@
  * that make/model in inventory.
  */
 export interface RawScrapedListing {
-  source: 'carzone' | 'carsireland';
+  source: 'carzone' | 'carsireland' | 'donedeal';
   listingId: string;
   listingUrl: string;
   title: string;

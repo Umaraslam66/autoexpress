@@ -26,6 +26,13 @@ export function VehicleDetailPage() {
   const excludedIds = state.excludedComparables[currentVehicle.id] ?? [];
   const decision = state.pricingDecisions[currentVehicle.id];
   const pricing = computePricing(currentVehicle, comparables, excludedIds, decision);
+  const sameYearComparables = pricing.includedComparables;
+  const excludedByYearCount = comparables.filter(
+    (listing) =>
+      !excludedIds.includes(listing.id) &&
+      (listing.confidence === 'high' || listing.confidence === 'medium') &&
+      listing.year !== currentVehicle.year,
+  ).length;
 
   const previousVehicle =
     state.vehicles[Math.max(0, state.vehicles.findIndex((candidate) => candidate.id === currentVehicle.id) - 1)];
@@ -84,6 +91,16 @@ export function VehicleDetailPage() {
           <Link className="secondary-button" to={nextVehicle ? `/vehicle/${nextVehicle.id}` : '#'}>
             Next
           </Link>
+          <button
+            type="button"
+            className="secondary-button"
+            disabled={isDemoMode}
+            onClick={() => {
+              void state.resetStockTurn(currentVehicle.id);
+            }}
+          >
+            Reset stock turn
+          </button>
           <button type="button" className="primary-button" onClick={() => void handleGeneratePricingFile()}>
             {isDemoMode ? 'Generate pricing file (disabled)' : 'Generate pricing file'}
           </button>
@@ -126,7 +143,10 @@ export function VehicleDetailPage() {
             </div>
           </SectionCard>
 
-          <SectionCard title="Market comparables" description={`Included comparables: ${pricing.comparableCount}. Low confidence listings remain visible separately.`}>
+          <SectionCard
+            title="Market comparables"
+            description={`Showing ${pricing.comparableCount} same-year comparables used in pricing. ${excludedByYearCount} off-year matches excluded.`}
+          >
             <div className="table-wrap">
               <table className="data-table">
                 <thead>
@@ -138,11 +158,12 @@ export function VehicleDetailPage() {
                     <th>Days listed</th>
                     <th>Score</th>
                     <th>Freshness</th>
+                    <th>Link</th>
                     <th></th>
                   </tr>
                 </thead>
                 <tbody>
-                  {comparables.map((listing) => {
+                  {sameYearComparables.map((listing) => {
                     const freshness = getFreshnessStatus(listing.lastSeenAt);
                     const isExcluded = excludedIds.includes(listing.id);
 
@@ -173,6 +194,11 @@ export function VehicleDetailPage() {
                           </Badge>
                         </td>
                         <td>
+                          <a className="inline-link" href={listing.listingUrl} target="_blank" rel="noreferrer">
+                            Open listing
+                          </a>
+                        </td>
+                        <td>
                           <button
                             type="button"
                             className="ghost-button"
@@ -191,7 +217,7 @@ export function VehicleDetailPage() {
               </table>
             </div>
             <div className="reason-grid">
-              {comparables.map((listing) => (
+              {sameYearComparables.map((listing) => (
                 <div key={`${listing.id}-reason`} className="reason-card">
                   <strong>{listing.title}</strong>
                   <p>{listing.explanation.join(' • ')}</p>

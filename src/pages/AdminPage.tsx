@@ -9,6 +9,7 @@ const SOURCE_LABELS: Record<string, string> = {
   autoxpress: 'AutoXpress',
   carzone: 'Carzone',
   carsireland: 'CarsIreland',
+  donedeal: 'DoneDeal',
 };
 
 export function AdminPage() {
@@ -16,7 +17,7 @@ export function AdminPage() {
   const isDemoMode = state.dataMode === 'seed';
   const isScrapingActive = state.scrapingSource !== null;
 
-  async function handleRefresh(source: 'all' | 'autoxpress' | 'carzone' | 'carsireland') {
+  async function handleRefresh(source: 'all' | 'autoxpress' | 'carzone' | 'carsireland' | 'donedeal') {
     await state.runAdminRefresh(source);
   }
 
@@ -36,7 +37,7 @@ export function AdminPage() {
         {/* ── Scraper controls ── */}
         <SectionCard
           title="Scraper controls"
-          description="Each button triggers a live browser scrape. The full-sync can take 15–25 minutes."
+          description="Each button triggers a live browser scrape. The full sync can take 15–25 minutes."
         >
           <div className="scraper-control-list">
 
@@ -85,10 +86,25 @@ export function AdminPage() {
               </button>
             </div>
 
+            <div className="scraper-control-row">
+              <div>
+                <strong>DoneDeal comparables</strong>
+                <p>Fetches competitor listings from donedeal.ie for all makes. Use this only when the source is enabled.</p>
+              </div>
+              <button
+                type="button"
+                className={`secondary-button ${state.scrapingSource === 'donedeal' ? 'is-active-scrape' : ''}`}
+                onClick={() => void handleRefresh('donedeal')}
+                disabled={isDemoMode || isScrapingActive}
+              >
+                {state.scrapingSource === 'donedeal' ? 'Running...' : 'Sync DoneDeal'}
+              </button>
+            </div>
+
             <div className="scraper-control-row scraper-control-row--primary">
               <div>
                 <strong>Full sync</strong>
-                <p>Runs all three scrapers in sequence and recomputes all pricing recommendations.</p>
+                <p>Runs inventory plus all comparable sources in sequence and recomputes pricing recommendations.</p>
               </div>
               <button
                 type="button"
@@ -97,6 +113,21 @@ export function AdminPage() {
                 disabled={isDemoMode || isScrapingActive}
               >
                 {state.scrapingSource === 'all' ? 'Running full sync...' : 'Full sync'}
+              </button>
+            </div>
+
+            <div className="scraper-control-row">
+              <div>
+                <strong>Rebuild pricing dataset</strong>
+                <p>Re-runs inventory sync, comparable syncs, and pricing recomputation after normalization or algorithm changes.</p>
+              </div>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => void state.runAdminBackfill()}
+                disabled={isDemoMode || isScrapingActive}
+              >
+                Rebuild dataset
               </button>
             </div>
 

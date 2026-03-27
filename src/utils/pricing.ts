@@ -56,16 +56,19 @@ export function computePricing(
   );
 
   const baseMedian = median(eligible.map((listing) => listing.price));
+  const excludedByYear = eligible.filter((listing) => listing.year !== vehicle.year);
 
   const filtered = eligible.filter((listing) => {
+    if (listing.year !== vehicle.year) {
+      return false;
+    }
     if (!baseMedian) {
       return true;
     }
 
     const priceDistance = Math.abs(listing.price - baseMedian) / baseMedian;
     const mileageDistance = Math.abs(listing.mileageKm - vehicle.mileageKm);
-    const yearDistance = Math.abs(listing.year - vehicle.year);
-    return priceDistance <= 0.18 && mileageDistance <= 80000 && yearDistance <= 1;
+    return priceDistance <= 0.18 && mileageDistance <= 80000;
   });
 
   const filteredOutliers = eligible.filter((listing) => !filtered.includes(listing));
@@ -112,7 +115,7 @@ export function computePricing(
   }
 
   const reasoning = [
-    `Based on ${filtered.length} market comparables after confidence filtering.`,
+    `Based on ${filtered.length} same-year market comparables after confidence filtering.`,
     marketMedian ? `Live market median is EUR ${Math.round(marketMedian).toLocaleString('en-IE')}.` : 'No median available yet.',
     similarMileageMedian
       ? `Similar-mileage median is EUR ${Math.round(similarMileageMedian).toLocaleString('en-IE')}.`
@@ -124,6 +127,10 @@ export function computePricing(
 
   if (decision) {
     reasoning.push(`Manual decision stored at EUR ${Math.round(decision.targetPrice).toLocaleString('en-IE')}.`);
+  }
+
+  if (excludedByYear.length) {
+    reasoning.push(`${excludedByYear.length} matched comparables were excluded because they are not the same year as this vehicle.`);
   }
 
   return {

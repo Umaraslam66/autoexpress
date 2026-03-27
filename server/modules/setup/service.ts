@@ -45,6 +45,7 @@ export async function ensureSystemSeed(): Promise<Dealership> {
     { source: SourceName.AUTOXPRESS, mode: InventorySourceMode.CSV, priority: 2 },
     { source: SourceName.CARZONE, mode: InventorySourceMode.SCRAPE, priority: 0 },
     { source: SourceName.CARSIRELAND, mode: InventorySourceMode.SCRAPE, priority: 0 },
+    { source: SourceName.DONEDEAL, mode: InventorySourceMode.SCRAPE, priority: 0 },
   ];
 
   for (const source of sourceConfigs) {

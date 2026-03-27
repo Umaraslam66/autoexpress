@@ -1,5 +1,6 @@
 import { Queue, type ConnectionOptions } from 'bullmq';
 import { getBullRedis } from '../../lib/redis.js';
+import { env } from '../../config/env.js';
 
 export const INGESTION_QUEUE_NAME = 'autoxpress-ingestion';
 
@@ -31,7 +32,7 @@ export async function enqueueSyncAll(dealershipId: string) {
 
 export async function enqueueSourceSync(
   dealershipId: string,
-  source: 'autoxpress' | 'carzone' | 'carsireland',
+  source: 'autoxpress' | 'carzone' | 'carsireland' | 'donedeal',
 ) {
   const queue = getIngestionQueue();
   if (!queue) {
@@ -71,4 +72,14 @@ export async function registerRecurringJobs(dealershipId: string) {
       repeat: { every: 1000 * 60 * 60 * 12 },
     },
   );
+  if (env.doneDealEnabled) {
+    await queue.add(
+      'repeat-donedeal',
+      { dealershipId, source: 'donedeal' },
+      {
+        jobId: `repeat-donedeal-${dealershipId}`,
+        repeat: { every: 1000 * 60 * 60 * 12 },
+      },
+    );
+  }
 }

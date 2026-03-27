@@ -993,6 +993,29 @@ textarea:focus {
   cursor: default;
 }
 
+.page-tabs {
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.page-tab {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.65rem 1rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  text-decoration: none;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.page-tab-active {
+  color: var(--text);
+  background: rgba(13, 94, 99, 0.12);
+  border-color: rgba(13, 94, 99, 0.28);
+}
+
 @media (max-width: 1180px) {
   .app-shell,
   .login-page,
@@ -1061,5 +1084,9 @@ textarea:focus {
   .sidebar-status-grid,
   .spec-grid {
     grid-template-columns: 1fr;
+  }
+
+  .page-tabs {
+    flex-direction: column;
   }
 }

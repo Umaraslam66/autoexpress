@@ -70,7 +70,14 @@ function buildDemoBootstrap(currentUserId?: string | null): ApiBootstrapData {
           : Math.round(
               insights.reduce(
                 (total, insight) =>
-                  total + Math.max(0, Math.round((Date.now() - new Date(insight.vehicle.dateAdded).getTime()) / (1000 * 60 * 60 * 24))),
+                  total +
+                    Math.max(
+                      0,
+                      Math.round(
+                        (Date.now() - new Date(insight.vehicle.stockClockStartAt ?? insight.vehicle.dateAdded).getTime()) /
+                          (1000 * 60 * 60 * 24),
+                      ),
+                    ),
                 0,
               ) / insights.length,
             ),
@@ -203,7 +210,18 @@ export async function getBootstrapData(currentUserId?: string | null): Promise<A
     insights.length === 0
       ? 0
       : Math.round(
-          insights.reduce((total, insight) => total + Math.max(0, Math.round((Date.now() - new Date(insight.vehicle.dateAdded).getTime()) / (1000 * 60 * 60 * 24))), 0) /
+          insights.reduce(
+            (total, insight) =>
+              total +
+              Math.max(
+                0,
+                Math.round(
+                  (Date.now() - new Date(insight.vehicle.stockClockStartAt ?? insight.vehicle.dateAdded).getTime()) /
+                    (1000 * 60 * 60 * 24),
+                ),
+              ),
+            0,
+          ) /
             insights.length,
         );
 

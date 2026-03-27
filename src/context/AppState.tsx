@@ -35,7 +35,7 @@ interface AppStateValue {
   pricingDecisions: Record<string, PricingDecision>;
   excludedComparables: Record<string, string[]>;
   pricingFiles: PricingFileRecord[];
-  /** Which scrape source is currently running ('all' | 'autoxpress' | 'carzone' | 'carsireland' | null) */
+  /** Which scrape source is currently running ('all' | 'autoxpress' | 'carzone' | 'carsireland' | 'donedeal' | null) */
   scrapingSource: string | null;
   /** ISO timestamp when the current scrape started, for elapsed-time display */
   scrapingStartedAt: string | null;
@@ -48,7 +48,9 @@ interface AppStateValue {
   toggleComparable: (vehicleId: string, comparableId: string) => Promise<void>;
   createPricingFile: (vehicleId: string) => Promise<PricingFileRecord | null>;
   refresh: () => Promise<void>;
-  runAdminRefresh: (source: 'all' | 'autoxpress' | 'carzone' | 'carsireland') => Promise<void>;
+  runAdminRefresh: (source: 'all' | 'autoxpress' | 'carzone' | 'carsireland' | 'donedeal') => Promise<void>;
+  runAdminBackfill: () => Promise<void>;
+  resetStockTurn: (vehicleId: string) => Promise<void>;
 }
 
 const EMPTY_BOOTSTRAP: ApiBootstrapData = {
@@ -252,6 +254,36 @@ export function AppStateProvider({ children }: PropsWithChildren) {
           setScrapingSource(null);
           setScrapingStartedAt(null);
         }
+      },
+      runAdminBackfill: async () => {
+        if (dataState.meta.mode === 'seed') {
+          setSyncError('Demo mode is active. Backfill is disabled in this environment.');
+          return;
+        }
+        setScrapingSource('all');
+        setScrapingStartedAt(new Date().toISOString());
+        setSyncError(null);
+        try {
+          await fetchJson('/api/admin/backfill', {
+            method: 'POST',
+          });
+          await refresh();
+        } catch (error) {
+          setSyncError(error instanceof Error ? error.message : 'Backfill failed.');
+        } finally {
+          setScrapingSource(null);
+          setScrapingStartedAt(null);
+        }
+      },
+      resetStockTurn: async (vehicleId) => {
+        if (dataState.meta.mode === 'seed') {
+          setSyncError('Demo mode is read-only. Stock turn reset is disabled in this environment.');
+          return;
+        }
+        await fetchJson(`/api/vehicles/${vehicleId}/stock-turn/reset`, {
+          method: 'POST',
+        });
+        await refresh();
       },
     }),
     [activeUser, dataState, isSyncing, syncError, scrapingSource, scrapingStartedAt, isBootstrapping],

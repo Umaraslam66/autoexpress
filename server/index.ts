@@ -13,6 +13,7 @@ import {
   createPricingDecision,
   createPricingFile,
   recomputeDealershipPricing,
+  resetVehicleStockTurn,
   toggleComparableExclusion,
 } from './modules/pricing/service.js';
 import { ensureSystemSeed } from './modules/setup/service.js';
@@ -38,7 +39,7 @@ const comparableExclusionSchema = z.object({
 });
 
 const refreshSchema = z.object({
-  source: z.union([z.literal('all'), z.literal('autoxpress'), z.literal('carzone'), z.literal('carsireland')]),
+  source: z.union([z.literal('all'), z.literal('autoxpress'), z.literal('carzone'), z.literal('carsireland'), z.literal('donedeal')]),
 });
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
@@ -176,6 +177,13 @@ async function start() {
     res.status(204).end();
   }));
 
+  app.post('/api/vehicles/:id/stock-turn/reset', asyncHandler(async (req, res) => {
+    await requireCurrentUser(req);
+    const vehicleId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const result = await resetVehicleStockTurn(req.session.dealershipId ?? '', vehicleId);
+    res.json(result);
+  }));
+
   app.get('/api/pricing-files', asyncHandler(async (req, res) => {
     await requireCurrentUser(req);
     const files = await listPricingFiles(req.session.dealershipId ?? '');
@@ -262,6 +270,20 @@ async function start() {
     res.json({ queued: false, result });
   }));
 
+  app.post('/api/admin/backfill', asyncHandler(async (req, res) => {
+    await requireCurrentUser(req);
+    if (env.demoMode) {
+      res.json({
+        queued: false,
+        messages: ['Demo mode is active. Backfill is disabled for this environment.'],
+      });
+      return;
+    }
+
+    const messages = await syncAllSourcesNow(req.session.dealershipId ?? '');
+    res.json({ queued: false, messages });
+  }));
+
   app.use(express.static(frontendDistDir));
 
   app.get(/^(?!\/api(?:\/|$)).*/, (_req, res) => {
@@ -274,7 +296,7 @@ async function start() {
     res.status(statusCode).json({ message });
   });
 
-  app.listen(env.port, () => {
+  app.listen(env.port, '127.0.0.1', () => {
     console.log(`AutoXpress API listening on http://127.0.0.1:${env.port}`);
   });
 }

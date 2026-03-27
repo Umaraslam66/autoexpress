@@ -1,4 +1,5 @@
 import type { ComparableListing, MatchConfidence, Vehicle } from '../../src/types.js';
+import { normalizeComparable, normalizeVehicle } from '../../src/utils/normalization.js';
 
 interface MatchResult {
   score: number;
@@ -7,15 +8,17 @@ interface MatchResult {
 }
 
 export function scoreComparable(vehicle: Vehicle, comparable: ComparableListing): MatchResult {
+  const normalizedVehicle = normalizeVehicle(vehicle);
+  const normalizedComparable = normalizeComparable(comparable);
   let score = 0;
   const explanation: string[] = [];
 
-  if (vehicle.make.toLowerCase() === comparable.make.toLowerCase()) {
+  if (normalizedVehicle.normalizedSpec?.normalizedMake.toLowerCase() === normalizedComparable.normalizedSpec?.normalizedMake.toLowerCase()) {
     score += 28;
     explanation.push('Make exact match');
   }
 
-  if (vehicle.model.toLowerCase() === comparable.model.toLowerCase()) {
+  if (normalizedVehicle.normalizedSpec?.normalizedModel.toLowerCase() === normalizedComparable.normalizedSpec?.normalizedModel.toLowerCase()) {
     score += 28;
     explanation.push('Model exact match');
   }
@@ -52,13 +55,11 @@ export function scoreComparable(vehicle: Vehicle, comparable: ComparableListing)
     explanation.push('Body type exact match');
   }
 
-  const variantWords = vehicle.variant
-    .toLowerCase()
-    .split(/\s+/)
-    .filter((word) => word.length > 2);
-  const variantMatches = variantWords.filter((word) => comparable.variant.toLowerCase().includes(word));
-  if (variantMatches.length) {
-    score += Math.min(8, variantMatches.length * 3);
+  const sharedTokens = (normalizedVehicle.normalizedSpec?.searchTokens ?? []).filter((token) =>
+    (normalizedComparable.normalizedSpec?.searchTokens ?? []).includes(token),
+  );
+  if (sharedTokens.length) {
+    score += Math.min(8, sharedTokens.length * 2);
     explanation.push('Trim keyword overlap');
   }
 
@@ -83,4 +84,3 @@ export function scoreComparable(vehicle: Vehicle, comparable: ComparableListing)
     explanation,
   };
 }
-

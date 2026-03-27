@@ -42,7 +42,7 @@ export async function startWorker() {
         return;
       }
 
-      const source = job.data.source as 'autoxpress' | 'carzone' | 'carsireland';
+      const source = job.data.source as 'autoxpress' | 'carzone' | 'carsireland' | 'donedeal';
       if (source === 'autoxpress') {
         await syncAutoXpressInventoryNow(job.data.dealershipId);
       } else {

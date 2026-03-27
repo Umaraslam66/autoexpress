@@ -1,5 +1,5 @@
 export type UserRole = 'admin' | 'pricing_manager';
-export type SourceName = 'autoxpress' | 'carzone' | 'carsireland';
+export type SourceName = 'autoxpress' | 'carzone' | 'carsireland' | 'donedeal';
 export type MatchConfidence = 'high' | 'medium' | 'low';
 export type PricePosition = 'below_market' | 'in_market' | 'above_market';
 export type FreshnessStatus = 'today' | 'yesterday' | 'stale';
@@ -32,8 +32,21 @@ export interface Vehicle {
   location: string;
   vehicleUrl: string;
   imageUrl: string;
+  normalizedSpec?: NormalizedVehicleSpec;
+  stockClockStartAt?: string;
+  lastPriceChangeAt?: string;
   notes: string[];
   priceHistory: PriceHistoryEntry[];
+}
+
+export interface NormalizedVehicleSpec {
+  normalizedMake: string;
+  normalizedModel: string;
+  trim: string;
+  engineBadge: string;
+  fuelType: string;
+  transmission: string;
+  searchTokens: string[];
 }
 
 export interface PriceHistoryEntry {
@@ -64,6 +77,7 @@ export interface ComparableListing {
   listedAt: string;
   daysListed: number;
   imageUrl?: string;
+  normalizedSpec?: NormalizedVehicleSpec;
   lastSeenAt: string;
   matchScore: number;
   confidence: MatchConfidence;
@@ -144,6 +158,8 @@ export interface VehicleFilterState {
   priceBand: string;
   freshness: string;
   confidence: string;
+  trim: string;
+  engine: string;
 }
 
 export interface BootstrapMeta {

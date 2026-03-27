@@ -6,7 +6,9 @@ import { buildVehicleInsights } from '../../utils/vehicleAnalysis';
 
 const navItems = [
   { to: '/', label: 'Dashboard' },
+  { to: '/stock-turn', label: 'Stock Turn' },
   { to: '/inventory', label: 'Inventory' },
+  { to: '/search', label: 'Search' },
   { to: '/queue', label: 'Pricing Queue' },
   { to: '/pricing-files', label: 'Pricing Files' },
   { to: '/ai', label: 'AI Insights' },
@@ -17,6 +19,7 @@ const SOURCE_SHORT_LABELS: Record<string, string> = {
   autoxpress: 'AX',
   carzone: 'CZ',
   carsireland: 'CI',
+  donedeal: 'DD',
 };
 
 export function Sidebar() {
@@ -27,7 +30,9 @@ export function Sidebar() {
   const insights = isDashboard
     ? buildVehicleInsights(vehicles, comparableListings, pricingDecisions, excludedComparables, pricingFiles)
     : [];
-  const averageAgeDays = Math.round(average(insights.map((insight) => daysBetween(insight.vehicle.dateAdded))) ?? 0);
+  const averageAgeDays = Math.round(
+    average(insights.map((insight) => daysBetween(insight.vehicle.stockClockStartAt ?? insight.vehicle.dateAdded))) ?? 0,
+  );
   const recentDecisions = insights
     .filter((insight) => insight.decision)
     .sort((a, b) => new Date(b.decision!.decidedAt).getTime() - new Date(a.decision!.decidedAt).getTime())

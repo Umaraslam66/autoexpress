@@ -13,6 +13,7 @@ import {
 import { exportInventoryCsv } from '../utils/csv';
 import { formatCurrency, formatDate, formatNumber } from '../utils/format';
 import { buildVehicleInsights } from '../utils/vehicleAnalysis';
+import { matchesSearchTokens, normalizeVehicle } from '../utils/normalization';
 
 const defaultFilters: VehicleFilterState = {
   query: '',
@@ -23,6 +24,8 @@ const defaultFilters: VehicleFilterState = {
   priceBand: '',
   freshness: '',
   confidence: '',
+  trim: '',
+  engine: '',
 };
 
 export function InventoryPage() {
@@ -54,14 +57,16 @@ export function InventoryPage() {
 
   const filtered = useMemo(() => {
     return insights.filter((insight) => {
-      const target = `${insight.vehicle.stockId} ${insight.vehicle.make} ${insight.vehicle.model} ${insight.vehicle.variant}`.toLowerCase();
-      const queryMatch = !filters.query || target.includes(filters.query.toLowerCase());
+      const normalizedVehicle = normalizeVehicle(insight.vehicle);
+      const queryMatch = !filters.query || matchesSearchTokens(normalizedVehicle.normalizedSpec?.searchTokens ?? [], filters.query);
       const makeMatch = !filters.make || insight.vehicle.make === filters.make;
       const fuelMatch = !filters.fuel || insight.vehicle.fuel === filters.fuel;
       const transmissionMatch = !filters.transmission || insight.vehicle.transmission === filters.transmission;
       const bodyTypeMatch = !filters.bodyType || insight.vehicle.bodyType === filters.bodyType;
       const freshnessMatch = !filters.freshness || insight.freshness === filters.freshness;
       const confidenceMatch = !filters.confidence || insight.bestConfidence === filters.confidence;
+      const trimMatch = !filters.trim || normalizedVehicle.normalizedSpec?.trim === filters.trim;
+      const engineMatch = !filters.engine || normalizedVehicle.normalizedSpec?.engineBadge === filters.engine;
       const priceMatch =
         !filters.priceBand ||
         (filters.priceBand === 'sub20' && insight.vehicle.price < 20000) ||
@@ -78,6 +83,8 @@ export function InventoryPage() {
         bodyTypeMatch &&
         freshnessMatch &&
         confidenceMatch &&
+        trimMatch &&
+        engineMatch &&
         priceMatch
       );
     });
@@ -85,6 +92,8 @@ export function InventoryPage() {
 
   const makes = Array.from(new Set(state.vehicles.map((vehicle) => vehicle.make)));
   const bodyTypes = Array.from(new Set(state.vehicles.map((vehicle) => vehicle.bodyType)));
+  const trims = Array.from(new Set(state.vehicles.map((vehicle) => normalizeVehicle(vehicle).normalizedSpec?.trim).filter(Boolean))) as string[];
+  const engines = Array.from(new Set(state.vehicles.map((vehicle) => normalizeVehicle(vehicle).normalizedSpec?.engineBadge).filter(Boolean))) as string[];
 
   return (
     <AppShell
@@ -128,6 +137,28 @@ export function InventoryPage() {
               onChange={(event) => setFilters((current) => ({ ...current, query: event.target.value }))}
               placeholder="Stock ID, make, model"
             />
+          </label>
+          <label>
+            Trim
+            <select value={filters.trim} onChange={(event) => setFilters((current) => ({ ...current, trim: event.target.value }))}>
+              <option value="">All</option>
+              {trims.map((trim) => (
+                <option key={trim} value={trim}>
+                  {trim}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Engine keyword
+            <select value={filters.engine} onChange={(event) => setFilters((current) => ({ ...current, engine: event.target.value }))}>
+              <option value="">All</option>
+              {engines.map((engine) => (
+                <option key={engine} value={engine}>
+                  {engine}
+                </option>
+              ))}
+            </select>
           </label>
           <label>
             Make

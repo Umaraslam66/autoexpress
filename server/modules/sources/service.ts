@@ -9,6 +9,7 @@ import {
   type Prisma,
 } from '@prisma/client';
 import type { ComparableListing, Vehicle } from '../../../src/types.js';
+import { buildNormalizedVehicleSpec } from '../../../src/utils/normalization.js';
 import type { RawScrapedListing } from '../../scrapers/rawTypes.js';
 import { env } from '../../config/env.js';
 import { prisma } from '../../lib/prisma.js';
@@ -16,6 +17,7 @@ import { HttpError } from '../../lib/http.js';
 import { scoreComparable } from '../../lib/matching.js';
 import { scrapeCarzoneMakeModel } from '../../scrapers/carzone.js';
 import { scrapeCarsIrelandMakeModel } from '../../scrapers/carsIreland.js';
+import { scrapeDoneDealMakeModel } from '../../scrapers/doneDeal.js';
 import { syncAutoXpressFeedInventory } from './adapters/autoxpressFeed.js';
 import { syncAutoXpressWebInventory } from './adapters/autoxpressWeb.js';
 import { recomputeDealershipPricing } from '../pricing/service.js';
@@ -65,6 +67,18 @@ function toVehicleDto(vehicle: DbVehicle): Vehicle {
     location: vehicle.location,
     vehicleUrl: vehicle.vehicleUrl,
     imageUrl: vehicle.imageUrl,
+    normalizedSpec:
+      buildNormalizedVehicleSpec({
+        make: vehicle.make,
+        model: vehicle.model,
+        variant: vehicle.variant,
+        fuel: vehicle.fuel,
+        transmission: vehicle.transmission,
+        engineLitres: vehicle.engineLitres,
+        year: vehicle.year,
+      }),
+    stockClockStartAt: vehicle.stockClockStartAt?.toISOString(),
+    lastPriceChangeAt: vehicle.lastPriceChangeAt?.toISOString(),
     notes: [],
     priceHistory: [],
   };
@@ -94,6 +108,16 @@ function rawToComparable(vehicle: Vehicle, raw: RawScrapedListing): ComparableLi
     listedAt: raw.scrapedAt,
     daysListed: 0,
     imageUrl: raw.imageUrl,
+    normalizedSpec: buildNormalizedVehicleSpec({
+      make: raw.make,
+      model: raw.model,
+      variant: raw.variant,
+      title: raw.title,
+      fuel: raw.fuel,
+      transmission: raw.transmission,
+      engineLitres: raw.engineLitres,
+      year: raw.year || vehicle.year,
+    }),
     lastSeenAt: raw.scrapedAt,
     matchScore: 0,
     confidence: 'low',
@@ -107,7 +131,7 @@ function rawToComparable(vehicle: Vehicle, raw: RawScrapedListing): ComparableLi
   return comparable;
 }
 
-type ComparableSourceName = typeof SourceName.CARZONE | typeof SourceName.CARSIRELAND;
+type ComparableSourceName = typeof SourceName.CARZONE | typeof SourceName.CARSIRELAND | typeof SourceName.DONEDEAL;
 
 function toInputJsonValue(value: unknown): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value ?? null)) as Prisma.InputJsonValue;
@@ -143,6 +167,8 @@ function mapSource(source: ComparableListing['source']): SourceName {
       return SourceName.CARZONE;
     case 'carsireland':
       return SourceName.CARSIRELAND;
+    case 'donedeal':
+      return SourceName.DONEDEAL;
     case 'autoxpress':
     default:
       return SourceName.AUTOXPRESS;
@@ -231,7 +257,7 @@ async function persistVehicle(
   sourceRunId: string,
   vehicle: Vehicle,
 ) {
-  const persisted = await tx.vehicle.upsert({
+  const existing = await tx.vehicle.findUnique({
     where: {
       dealershipId_source_externalId: {
         dealershipId,
@@ -239,57 +265,91 @@ async function persistVehicle(
         externalId: vehicle.stockId,
       },
     },
-    update: {
-      stockId: vehicle.stockId,
-      registration: vehicle.registration,
-      vinFragment: vehicle.vinFragment ?? null,
-      make: vehicle.make,
-      model: vehicle.model,
-      variant: vehicle.variant,
-      year: vehicle.year,
-      mileageKm: vehicle.mileageKm,
-      fuel: vehicle.fuel,
-      transmission: vehicle.transmission,
-      bodyType: vehicle.bodyType,
-      engineLitres: vehicle.engineLitres,
-      colour: vehicle.colour,
-      price: vehicle.price,
-      status: mapVehicleStatus(vehicle.status),
-      dateAdded: sanitizeDate(vehicle.dateAdded) ?? new Date(),
-      location: vehicle.location,
-      vehicleUrl: vehicle.vehicleUrl,
-      imageUrl: vehicle.imageUrl,
-      notesJson: toInputJsonValue(vehicle.notes),
-      sourceRunId,
-      lastSeenAt: new Date(),
-    },
-    create: {
-      dealershipId,
-      source: SourceName.AUTOXPRESS,
-      externalId: vehicle.stockId,
-      stockId: vehicle.stockId,
-      registration: vehicle.registration,
-      vinFragment: vehicle.vinFragment ?? null,
-      make: vehicle.make,
-      model: vehicle.model,
-      variant: vehicle.variant,
-      year: vehicle.year,
-      mileageKm: vehicle.mileageKm,
-      fuel: vehicle.fuel,
-      transmission: vehicle.transmission,
-      bodyType: vehicle.bodyType,
-      engineLitres: vehicle.engineLitres,
-      colour: vehicle.colour,
-      price: vehicle.price,
-      status: mapVehicleStatus(vehicle.status),
-      dateAdded: sanitizeDate(vehicle.dateAdded) ?? new Date(),
-      location: vehicle.location,
-      vehicleUrl: vehicle.vehicleUrl,
-      imageUrl: vehicle.imageUrl,
-      notesJson: toInputJsonValue(vehicle.notes),
-      sourceRunId,
-    },
   });
+
+  const normalizedSpec =
+    vehicle.normalizedSpec ??
+    buildNormalizedVehicleSpec({
+      make: vehicle.make,
+      model: vehicle.model,
+      variant: vehicle.variant,
+      fuel: vehicle.fuel,
+      transmission: vehicle.transmission,
+      engineLitres: vehicle.engineLitres,
+      year: vehicle.year,
+    });
+
+  const persisted = existing
+    ? await tx.vehicle.update({
+        where: { id: existing.id },
+        data: {
+          stockId: vehicle.stockId,
+          registration: vehicle.registration,
+          vinFragment: vehicle.vinFragment ?? null,
+          make: vehicle.make,
+          model: vehicle.model,
+          variant: vehicle.variant,
+          year: vehicle.year,
+          mileageKm: vehicle.mileageKm,
+          fuel: vehicle.fuel,
+          transmission: vehicle.transmission,
+          bodyType: vehicle.bodyType,
+          engineLitres: vehicle.engineLitres,
+          colour: vehicle.colour,
+          price: vehicle.price,
+          status: mapVehicleStatus(vehicle.status),
+          dateAdded: sanitizeDate(vehicle.dateAdded) ?? new Date(),
+          location: vehicle.location,
+          vehicleUrl: vehicle.vehicleUrl,
+          imageUrl: vehicle.imageUrl,
+          normalizedSpecJson: toInputJsonValue(normalizedSpec),
+          stockClockStartAt: existing.stockClockStartAt ?? sanitizeDate(vehicle.stockClockStartAt ?? vehicle.dateAdded) ?? new Date(),
+          lastPriceChangeAt:
+            existing.price !== vehicle.price
+              ? new Date()
+              : existing.lastPriceChangeAt ??
+                sanitizeDate(vehicle.lastPriceChangeAt) ??
+                sanitizeDate(vehicle.dateAdded) ??
+                new Date(),
+          notesJson: toInputJsonValue(vehicle.notes),
+          sourceRunId,
+          lastSeenAt: new Date(),
+        },
+      })
+    : await tx.vehicle.create({
+        data: {
+          dealershipId,
+          source: SourceName.AUTOXPRESS,
+          externalId: vehicle.stockId,
+          stockId: vehicle.stockId,
+          registration: vehicle.registration,
+          vinFragment: vehicle.vinFragment ?? null,
+          make: vehicle.make,
+          model: vehicle.model,
+          variant: vehicle.variant,
+          year: vehicle.year,
+          mileageKm: vehicle.mileageKm,
+          fuel: vehicle.fuel,
+          transmission: vehicle.transmission,
+          bodyType: vehicle.bodyType,
+          engineLitres: vehicle.engineLitres,
+          colour: vehicle.colour,
+          price: vehicle.price,
+          status: mapVehicleStatus(vehicle.status),
+          dateAdded: sanitizeDate(vehicle.dateAdded) ?? new Date(),
+          location: vehicle.location,
+          vehicleUrl: vehicle.vehicleUrl,
+          imageUrl: vehicle.imageUrl,
+          normalizedSpecJson: toInputJsonValue(normalizedSpec),
+          stockClockStartAt: sanitizeDate(vehicle.stockClockStartAt ?? vehicle.dateAdded) ?? new Date(),
+          lastPriceChangeAt:
+            sanitizeDate(vehicle.lastPriceChangeAt) ??
+            sanitizeDate(vehicle.dateAdded) ??
+            new Date(),
+          notesJson: toInputJsonValue(vehicle.notes),
+          sourceRunId,
+        },
+      });
 
   await tx.vehicleSnapshot.create({
     data: {
@@ -352,6 +412,19 @@ async function persistComparable(
       listedAt: sanitizeDate(comparable.listedAt),
       daysListed: comparable.daysListed,
       imageUrl: comparable.imageUrl ?? null,
+      normalizedSpecJson: toInputJsonValue(
+        comparable.normalizedSpec ??
+          buildNormalizedVehicleSpec({
+            make: comparable.make,
+            model: comparable.model,
+            variant: comparable.variant,
+            title: comparable.title,
+            fuel: comparable.fuel,
+            transmission: comparable.transmission,
+            engineLitres: comparable.engineLitres,
+            year: comparable.year,
+          }),
+      ),
       lastSeenAt: sanitizeDate(comparable.lastSeenAt) ?? new Date(),
       rawValuesJson: toInputJsonValue(comparable),
       isActive: true,
@@ -378,6 +451,19 @@ async function persistComparable(
       listedAt: sanitizeDate(comparable.listedAt),
       daysListed: comparable.daysListed,
       imageUrl: comparable.imageUrl ?? null,
+      normalizedSpecJson: toInputJsonValue(
+        comparable.normalizedSpec ??
+          buildNormalizedVehicleSpec({
+            make: comparable.make,
+            model: comparable.model,
+            variant: comparable.variant,
+            title: comparable.title,
+            fuel: comparable.fuel,
+            transmission: comparable.transmission,
+            engineLitres: comparable.engineLitres,
+            year: comparable.year,
+          }),
+      ),
       lastSeenAt: sanitizeDate(comparable.lastSeenAt) ?? new Date(),
       rawValuesJson: toInputJsonValue(comparable),
     },
@@ -571,7 +657,9 @@ async function syncComparableSource(
       rawListings =
         source === SourceName.CARZONE
           ? await scrapeCarzoneMakeModel(make, model)
-          : await scrapeCarsIrelandMakeModel(make, model);
+          : source === SourceName.CARSIRELAND
+            ? await scrapeCarsIrelandMakeModel(make, model)
+            : await scrapeDoneDealMakeModel(make, model);
     } catch (err) {
       console.error(`[${source}] Failed to scrape ${make} ${model}:`, (err as Error).message);
       return 0;
@@ -646,10 +734,13 @@ async function syncComparableSource(
   }
 }
 
-export async function syncMarketComparablesNow(dealershipId: string, source: 'carzone' | 'carsireland') {
+export async function syncMarketComparablesNow(dealershipId: string, source: 'carzone' | 'carsireland' | 'donedeal') {
+  if (source === 'donedeal' && !env.doneDealEnabled) {
+    throw new HttpError(409, 'DoneDeal scraping is disabled. Set DONEDEAL_ENABLED=true to run this source.');
+  }
   return syncComparableSource(
     dealershipId,
-    source === 'carzone' ? SourceName.CARZONE : SourceName.CARSIRELAND,
+    source === 'carzone' ? SourceName.CARZONE : source === 'carsireland' ? SourceName.CARSIRELAND : SourceName.DONEDEAL,
   );
 }
 
@@ -658,7 +749,11 @@ export async function syncAllSourcesNow(dealershipId: string) {
   const inventoryResult = await syncAutoXpressInventoryNow(dealershipId);
   messages.push(inventoryResult.message);
 
-  for (const source of ['carzone', 'carsireland'] as const) {
+  for (const source of ['carzone', 'carsireland', 'donedeal'] as const) {
+    if (source === 'donedeal' && !env.doneDealEnabled) {
+      messages.push('Skipped DoneDeal sync because DONEDEAL_ENABLED=false.');
+      continue;
+    }
     try {
       const result = await syncMarketComparablesNow(dealershipId, source);
       messages.push(`Synced ${result.recordsProcessed} ${source} listings.`);

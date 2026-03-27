@@ -3,14 +3,15 @@ import { useNavigate } from 'react-router-dom';
 import { useAppState } from '../../context/AppState';
 import type { Vehicle } from '../../types';
 import { formatCurrency } from '../../utils/format';
+import { matchesSearchTokens, normalizeVehicle } from '../../utils/normalization';
 
 function highlight(text: string, query: string): string {
   return text; // plain text; markup done via <mark> trick below
 }
 
 function matchesQuery(vehicle: Vehicle, q: string): boolean {
-  const target = `${vehicle.stockId} ${vehicle.make} ${vehicle.model} ${vehicle.variant} ${vehicle.year}`.toLowerCase();
-  return target.includes(q.toLowerCase());
+  const normalized = normalizeVehicle(vehicle);
+  return matchesSearchTokens(normalized.normalizedSpec?.searchTokens ?? [], q);
 }
 
 export function GlobalSearch() {
@@ -125,7 +126,7 @@ export function GlobalSearch() {
           {query.trim().length >= 2 && (
             <button
               type="button"
-              onClick={() => { setOpen(false); navigate(`/inventory?q=${encodeURIComponent(query.trim())}`); }}
+              onClick={() => { setOpen(false); navigate(`/search?q=${encodeURIComponent(query.trim())}`); }}
               style={{
                 display: 'block',
                 width: '100%',
@@ -139,7 +140,7 @@ export function GlobalSearch() {
                 color: 'inherit',
               }}
             >
-              View all results in Inventory →
+              View all results in Search →
             </button>
           )}
         </div>

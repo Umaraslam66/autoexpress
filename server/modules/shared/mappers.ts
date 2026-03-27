@@ -30,6 +30,7 @@ import type {
   SourceName as SourceNameDto,
   Vehicle as VehicleDto,
 } from '../../../src/types.js';
+import { buildNormalizedVehicleSpec } from '../../../src/utils/normalization.js';
 
 function mapRole(role: UserRole): AppUser['role'] {
   return role === UserRole.ADMIN ? 'admin' : 'pricing_manager';
@@ -43,6 +44,8 @@ export function mapSourceName(source: SourceName): SourceNameDto {
       return 'carzone';
     case SourceName.CARSIRELAND:
       return 'carsireland';
+    case SourceName.DONEDEAL:
+      return 'donedeal';
     default:
       return 'autoxpress';
   }
@@ -147,6 +150,19 @@ export function toVehicleDto(vehicle: Vehicle & { snapshots?: VehicleSnapshot[] 
     location: vehicle.location,
     vehicleUrl: vehicle.vehicleUrl,
     imageUrl: vehicle.imageUrl,
+    normalizedSpec:
+      (vehicle.normalizedSpecJson as VehicleDto['normalizedSpec'] | null) ??
+      buildNormalizedVehicleSpec({
+        make: vehicle.make,
+        model: vehicle.model,
+        variant: vehicle.variant,
+        fuel: vehicle.fuel,
+        transmission: vehicle.transmission,
+        engineLitres: vehicle.engineLitres,
+        year: vehicle.year,
+      }),
+    stockClockStartAt: vehicle.stockClockStartAt?.toISOString(),
+    lastPriceChangeAt: vehicle.lastPriceChangeAt?.toISOString(),
     notes: Array.isArray(vehicle.notesJson) ? vehicle.notesJson.filter((item): item is string => typeof item === 'string') : [],
     priceHistory: (vehicle.snapshots ?? [])
       .slice()
@@ -189,6 +205,18 @@ export function toComparableListingDto(
     listedAt: listing.listedAt?.toISOString() ?? listing.lastSeenAt.toISOString(),
     daysListed: listing.daysListed,
     imageUrl: listing.imageUrl ?? undefined,
+    normalizedSpec:
+      (listing.normalizedSpecJson as ComparableListing['normalizedSpec'] | null) ??
+      buildNormalizedVehicleSpec({
+        make: listing.make,
+        model: listing.model,
+        variant: listing.variant,
+        title: listing.title,
+        fuel: listing.fuel,
+        transmission: listing.transmission,
+        engineLitres: listing.engineLitres ?? undefined,
+        year: listing.year,
+      }),
     lastSeenAt: listing.lastSeenAt.toISOString(),
     matchScore: vehicleMatch.score,
     confidence: mapConfidence(vehicleMatch.confidence),
@@ -261,7 +289,9 @@ export function toSourceHealth(
           : inventorySource.mode === InventorySourceMode.SCRAPE
             ? 'Every 4 hours via website scrape'
             : 'On demand CSV import'
-        : 'Every 12 hours via browser automation',
+        : inventorySource.source === SourceName.DONEDEAL
+          ? 'Feature-flagged browser automation'
+          : 'Every 12 hours via browser automation',
     lastSuccessAt: lastSuccessAt.toISOString(),
     freshness: mapFreshness(inventorySource.lastSuccessAt ?? latestJobRun?.completedAt ?? null),
     status: mapHealthStatus(status),

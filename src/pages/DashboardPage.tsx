@@ -29,6 +29,9 @@ export function DashboardPage() {
       subtitle="Prioritized stock review and market-risk coverage across the current inventory."
       actions={
         <div className="action-row">
+          <Link className="secondary-button" to="/stock-turn">
+            Open stock turn
+          </Link>
           <Link className="secondary-button" to="/inventory">
             Open inventory
           </Link>
@@ -38,6 +41,15 @@ export function DashboardPage() {
         </div>
       }
     >
+      <div className="page-tabs">
+        <Link className="page-tab page-tab-active" to="/">
+          Decision Board
+        </Link>
+        <Link className="page-tab" to="/stock-turn">
+          Stock Turn
+        </Link>
+      </div>
+
       <section className="kpi-grid">
         <KpiCard
           label="In-stock vehicles"

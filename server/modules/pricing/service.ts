@@ -76,6 +76,30 @@ export async function recomputeDealershipPricing(dealershipId: string) {
   }
 }
 
+export async function resetVehicleStockTurn(
+  dealershipId: string,
+  vehicleId: string,
+  tx: Prisma.TransactionClient | typeof prisma = prisma,
+) {
+  const vehicle = await tx.vehicle.findFirst({
+    where: { id: vehicleId, dealershipId },
+  });
+
+  if (!vehicle) {
+    throw new HttpError(404, 'Vehicle not found.');
+  }
+
+  const now = new Date();
+  await tx.vehicle.update({
+    where: { id: vehicleId },
+    data: {
+      stockClockStartAt: now,
+    },
+  });
+
+  return { vehicleId, stockClockStartAt: now.toISOString() };
+}
+
 export async function createPricingDecision(
   dealershipId: string,
   userId: string,
