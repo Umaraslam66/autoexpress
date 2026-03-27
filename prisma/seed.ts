@@ -39,6 +39,9 @@ async function main() {
     { source: SourceName.AUTOXPRESS, mode: InventorySourceMode.CSV, priority: 2 },
     { source: SourceName.CARZONE, mode: InventorySourceMode.SCRAPE, priority: 0 },
     { source: SourceName.CARSIRELAND, mode: InventorySourceMode.SCRAPE, priority: 0 },
+    ...(process.env.DONEDEAL_ENABLED === 'true'
+      ? [{ source: SourceName.DONEDEAL, mode: InventorySourceMode.SCRAPE, priority: 0 }]
+      : []),
   ]) {
     await prisma.inventorySource.upsert({
       where: {

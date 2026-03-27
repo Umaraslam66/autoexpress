@@ -16,6 +16,10 @@ export function AdminPage() {
   const state = useAppState();
   const isDemoMode = state.dataMode === 'seed';
   const isScrapingActive = state.scrapingSource !== null;
+  const doneDealAvailable =
+    isDemoMode ||
+    state.sourceHealth.some((source) => source.source === 'donedeal') ||
+    state.jobRuns.some((run) => run.source === 'donedeal');
 
   async function handleRefresh(source: 'all' | 'autoxpress' | 'carzone' | 'carsireland' | 'donedeal') {
     await state.runAdminRefresh(source);
@@ -86,20 +90,22 @@ export function AdminPage() {
               </button>
             </div>
 
-            <div className="scraper-control-row">
-              <div>
-                <strong>DoneDeal comparables</strong>
-                <p>Fetches competitor listings from donedeal.ie for all makes. Use this only when the source is enabled.</p>
+            {doneDealAvailable ? (
+              <div className="scraper-control-row">
+                <div>
+                  <strong>DoneDeal comparables</strong>
+                  <p>Fetches competitor listings from donedeal.ie for all makes. Use this only when the source is enabled.</p>
+                </div>
+                <button
+                  type="button"
+                  className={`secondary-button ${state.scrapingSource === 'donedeal' ? 'is-active-scrape' : ''}`}
+                  onClick={() => void handleRefresh('donedeal')}
+                  disabled={isDemoMode || isScrapingActive}
+                >
+                  {state.scrapingSource === 'donedeal' ? 'Running...' : 'Sync DoneDeal'}
+                </button>
               </div>
-              <button
-                type="button"
-                className={`secondary-button ${state.scrapingSource === 'donedeal' ? 'is-active-scrape' : ''}`}
-                onClick={() => void handleRefresh('donedeal')}
-                disabled={isDemoMode || isScrapingActive}
-              >
-                {state.scrapingSource === 'donedeal' ? 'Running...' : 'Sync DoneDeal'}
-              </button>
-            </div>
+            ) : null}
 
             <div className="scraper-control-row scraper-control-row--primary">
               <div>

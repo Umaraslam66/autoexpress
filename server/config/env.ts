@@ -64,7 +64,7 @@ export const env = {
   scrapeMaxVehicles: parseIntEnv(process.env.SCRAPE_MAX_VEHICLES, 8),
   scrapeMaxAutoXpressPages: parseIntEnv(process.env.SCRAPE_MAX_AUTOXPRESS_PAGES, 2),
   scrapeMaxComparablesPerSource: parseIntEnv(process.env.SCRAPE_MAX_COMPARABLES_PER_SOURCE, 4),
-  doneDealEnabled: process.env.DONEDEAL_ENABLED !== 'false',
+  doneDealEnabled: process.env.DONEDEAL_ENABLED === 'true',
   bootstrapCacheTtlMs: parseIntEnv(process.env.BOOTSTRAP_CACHE_TTL_MS, 1000 * 60 * 5),
   openrouterApiKey: process.env.OPENROUTER_API_KEY ?? '',
   openrouterModel: process.env.MODEL_NAME ?? 'google/gemini-3.1-flash-lite-preview',
