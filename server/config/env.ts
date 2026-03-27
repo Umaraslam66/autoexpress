@@ -57,6 +57,7 @@ export const env = {
   nodeEnv: process.env.NODE_ENV ?? 'development',
   demoMode: process.env.DEMO_MODE === 'true',
   port: parseIntEnv(process.env.PORT, DEFAULT_PORT),
+  host: process.env.HOST ?? (process.env.NODE_ENV === 'production' ? '0.0.0.0' : '127.0.0.1'),
   sessionSecret: process.env.SESSION_SECRET ?? 'autoxpress-dev-session-secret',
   databaseUrl: process.env.DATABASE_URL ?? '',
   redisUrl: process.env.REDIS_URL ?? '',

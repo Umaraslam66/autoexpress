@@ -719,6 +719,32 @@ textarea:focus {
   gap: 1rem;
 }
 
+.quick-login-panel {
+  display: grid;
+  gap: 0.9rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
+}
+
+.preview-login-panel {
+  margin-top: -0.2rem;
+}
+
+.quick-login-panel p {
+  margin: 0;
+}
+
+.quick-login-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.quick-login-actions .ghost-button,
+.quick-login-actions .secondary-button {
+  min-width: 12rem;
+}
+
 .credential-list {
   display: grid;
   gap: 0.8rem;

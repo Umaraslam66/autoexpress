@@ -6,6 +6,15 @@ import {
   useState,
   type PropsWithChildren,
 } from 'react';
+import {
+  comparableListings as demoComparableListings,
+  jobRuns as demoJobRuns,
+  normalizationRules as demoNormalizationRules,
+  sourceHealth as demoSourceHealth,
+  users as demoUsers,
+  vehicles as demoVehicles,
+} from '../data/mockData';
+import { AUTH_BYPASS_ENABLED } from '../config';
 import type {
   ApiBootstrapData,
   AppUser,
@@ -18,6 +27,7 @@ import type {
   SourceHealth,
   Vehicle,
 } from '../types';
+import { buildVehicleInsights } from '../utils/vehicleAnalysis';
 
 interface AppStateValue {
   users: AppUser[];
@@ -43,6 +53,7 @@ interface AppStateValue {
   isBootstrapping: boolean;
   dismissError: () => void;
   login: (email: string, password: string) => Promise<boolean>;
+  bypassLogin: (userId: string) => Promise<void>;
   logout: () => Promise<void>;
   savePricingDecision: (vehicleId: string, input: PricingDecisionCreateInput) => Promise<void>;
   toggleComparable: (vehicleId: string, comparableId: string) => Promise<void>;
@@ -80,6 +91,83 @@ const EMPTY_BOOTSTRAP: ApiBootstrapData = {
 };
 
 const AppStateContext = createContext<AppStateValue | undefined>(undefined);
+const PREVIEW_SESSION_KEY = 'autoxpress.preview-user';
+
+function getStoredPreviewUserId(): string | null {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+  return window.localStorage.getItem(PREVIEW_SESSION_KEY);
+}
+
+function setStoredPreviewUserId(userId: string | null) {
+  if (typeof window === 'undefined') {
+    return;
+  }
+  if (userId) {
+    window.localStorage.setItem(PREVIEW_SESSION_KEY, userId);
+    return;
+  }
+  window.localStorage.removeItem(PREVIEW_SESSION_KEY);
+}
+
+function buildPreviewBootstrap(currentUserId?: string | null): ApiBootstrapData {
+  const pricingDecisions = {};
+  const excludedComparables = {};
+  const pricingFiles: PricingFileRecord[] = [];
+  const insights = buildVehicleInsights(
+    demoVehicles,
+    demoComparableListings,
+    pricingDecisions,
+    excludedComparables,
+    pricingFiles,
+  );
+
+  return {
+    users: demoUsers,
+    vehicles: demoVehicles,
+    comparableListings: demoComparableListings,
+    sourceHealth: demoSourceHealth,
+    jobRuns: demoJobRuns,
+    normalizationRules: demoNormalizationRules,
+    pricingDecisions,
+    excludedComparables,
+    pricingFiles,
+    currentUser: demoUsers.find((user) => user.id === currentUserId) ?? demoUsers[0] ?? null,
+    dashboard: {
+      totalVehicles: demoVehicles.length,
+      sufficientComparables: insights.filter((insight) => insight.pricing.comparableCount >= 3).length,
+      needingReview: insights.filter((insight) => insight.needsReview).length,
+      aboveMarket: insights.filter((insight) => insight.pricing.currentPosition === 'above_market').length,
+      belowMarket: insights.filter((insight) => insight.pricing.currentPosition === 'below_market').length,
+      averageDaysInStock:
+        insights.length === 0
+          ? 0
+          : Math.round(
+              insights.reduce(
+                (total, insight) =>
+                  total +
+                  Math.max(
+                    0,
+                    Math.round(
+                      (Date.now() - new Date(insight.vehicle.stockClockStartAt ?? insight.vehicle.dateAdded).getTime()) /
+                        (1000 * 60 * 60 * 24),
+                    ),
+                  ),
+                0,
+              ) / insights.length,
+            ),
+    },
+    meta: {
+      generatedAt: new Date().toISOString(),
+      mode: 'seed',
+      messages: [
+        'Preview bypass is active. The app is using curated sample data without backend authentication.',
+        'Writes, live refresh jobs, and scraper-backed data changes are disabled in this mode.',
+      ],
+    },
+  };
+}
 
 async function fetchJson<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
   const response = await fetch(input, {
@@ -130,6 +218,16 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     setSyncError(null);
 
     try {
+      if (AUTH_BYPASS_ENABLED) {
+        const previewUserId = getStoredPreviewUserId();
+        if (previewUserId) {
+          const previewBootstrap = buildPreviewBootstrap(previewUserId);
+          setActiveUser(previewBootstrap.currentUser);
+          setDataState(previewBootstrap);
+          return;
+        }
+      }
+
       const session = await fetchJson<{ user: AppUser | null }>('/api/auth/me');
       setActiveUser(session.user);
       await loadBootstrap(session.user);
@@ -173,6 +271,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
       dismissError: () => setSyncError(null),
       login: async (email, password) => {
         try {
+          setStoredPreviewUserId(null);
           const payload = await fetchJson<{ user: AppUser }>('/api/auth/login', {
             method: 'POST',
             body: JSON.stringify({ email, password }),
@@ -185,10 +284,22 @@ export function AppStateProvider({ children }: PropsWithChildren) {
           return false;
         }
       },
+      bypassLogin: async (userId) => {
+        setSyncError(null);
+        setStoredPreviewUserId(userId);
+        const previewBootstrap = buildPreviewBootstrap(userId);
+        setActiveUser(previewBootstrap.currentUser);
+        setDataState(previewBootstrap);
+        setIsBootstrapping(false);
+      },
       logout: async () => {
-        await fetchJson('/api/auth/logout', {
-          method: 'POST',
-        });
+        const previewUserId = getStoredPreviewUserId();
+        setStoredPreviewUserId(null);
+        if (!previewUserId) {
+          await fetchJson('/api/auth/logout', {
+            method: 'POST',
+          });
+        }
         setActiveUser(null);
         setDataState({
           ...EMPTY_BOOTSTRAP,
