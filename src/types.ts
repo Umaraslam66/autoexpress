@@ -42,6 +42,7 @@ export interface Vehicle {
 export interface NormalizedVehicleSpec {
   normalizedMake: string;
   normalizedModel: string;
+  derivative: string;
   trim: string;
   engineBadge: string;
   fuelType: string;
@@ -184,6 +185,10 @@ export interface VehicleDetailResponse {
   decision: PricingDecision | null;
   excludedComparableIds: string[];
   latestPricingFile: PricingFileRecord | null;
+}
+
+export interface StockTurnUpdateInput {
+  stockClockStartAt: string;
 }
 
 export interface PricingDecisionCreateInput {

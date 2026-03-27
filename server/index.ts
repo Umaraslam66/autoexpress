@@ -14,6 +14,7 @@ import {
   createPricingFile,
   recomputeDealershipPricing,
   resetVehicleStockTurn,
+  setVehicleStockTurnDate,
   toggleComparableExclusion,
 } from './modules/pricing/service.js';
 import { ensureSystemSeed } from './modules/setup/service.js';
@@ -36,6 +37,10 @@ const pricingDecisionSchema = z.object({
 const comparableExclusionSchema = z.object({
   comparableId: z.string().min(1),
   excluded: z.boolean(),
+});
+
+const stockTurnUpdateSchema = z.object({
+  stockClockStartAt: z.string().datetime(),
 });
 
 const refreshSchema = z.object({
@@ -181,6 +186,14 @@ async function start() {
     await requireCurrentUser(req);
     const vehicleId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
     const result = await resetVehicleStockTurn(req.session.dealershipId ?? '', vehicleId);
+    res.json(result);
+  }));
+
+  app.post('/api/vehicles/:id/stock-turn', asyncHandler(async (req, res) => {
+    await requireCurrentUser(req);
+    const vehicleId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const payload = stockTurnUpdateSchema.parse(req.body);
+    const result = await setVehicleStockTurnDate(req.session.dealershipId ?? '', vehicleId, payload.stockClockStartAt);
     res.json(result);
   }));
 

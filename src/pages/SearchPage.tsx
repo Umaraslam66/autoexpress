@@ -77,8 +77,9 @@ export function SearchPage() {
               <tr>
                 <th>Stock</th>
                 <th>Vehicle</th>
+                <th>Derivative</th>
                 <th>Trim</th>
-                <th>Engine</th>
+                <th>Fuel / Gearbox</th>
                 <th>Mileage</th>
                 <th>Price</th>
                 <th></th>
@@ -92,8 +93,12 @@ export function SearchPage() {
                     <strong>{vehicle.make} {vehicle.model}</strong>
                     <span>{vehicle.variant}</span>
                   </td>
+                  <td>{vehicle.normalizedSpec?.derivative || 'N/A'}</td>
                   <td>{vehicle.normalizedSpec?.trim || 'N/A'}</td>
-                  <td>{vehicle.normalizedSpec?.engineBadge || 'N/A'}</td>
+                  <td>
+                    <strong>{vehicle.normalizedSpec?.fuelType || vehicle.fuel}</strong>
+                    <span>{vehicle.normalizedSpec?.transmission || vehicle.transmission}</span>
+                  </td>
                   <td>{formatNumber(vehicle.mileageKm)} km</td>
                   <td>{formatCurrency(vehicle.price)}</td>
                   <td>

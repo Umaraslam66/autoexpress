@@ -3,6 +3,7 @@ import type { ComparableListing, Vehicle } from '../types.js';
 export interface NormalizedVehicleSpec {
   normalizedMake: string;
   normalizedModel: string;
+  derivative: string;
   trim: string;
   engineBadge: string;
   fuelType: string;
@@ -31,6 +32,12 @@ const TRIM_PATTERNS = [
 ];
 
 const ENGINE_PATTERNS = [
+  'phev',
+  'hev',
+  'hybrid',
+  'electric',
+  'diesel',
+  'petrol',
   'tdi',
   'tsi',
   'tfsi',
@@ -55,8 +62,7 @@ function normalizeText(value: string): string {
     .replace(/volkswagen|vw/g, 'volkswagen')
     .replace(/s[\s-]?line/g, 's line')
     .replace(/m[\s-]?sport/g, 'm sport')
-    .replace(/1\.6d\b/g, '1.6 diesel')
-    .replace(/2\.0d\b/g, '2.0 diesel')
+    .replace(/(\d\.\d)\s*d\b/g, '$1 diesel')
     .replace(/[^\w.\s-]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
@@ -81,13 +87,33 @@ function extractTrim(text: string): string {
 function extractEngineBadge(text: string, engineLitres?: number): string {
   const found = ENGINE_PATTERNS.find((pattern) => text.includes(pattern));
   if (found) {
-    return found.toUpperCase();
+    switch (found) {
+      case 'hybrid':
+      case 'electric':
+      case 'diesel':
+      case 'petrol':
+        return titleCase(found);
+      case 'phev':
+        return 'PHEV';
+      case 'hev':
+        return 'HEV';
+      default:
+        return found.toUpperCase();
+    }
   }
   const litresMatch = text.match(/\b\d\.\d\b/);
   if (litresMatch) {
     return litresMatch[0];
   }
   return engineLitres ? `${engineLitres.toFixed(1)}L` : '';
+}
+
+function extractEngineCapacity(text: string, engineLitres?: number): string {
+  const litresMatch = text.match(/\b\d\.\d\b/);
+  if (litresMatch) {
+    return litresMatch[0];
+  }
+  return engineLitres ? engineLitres.toFixed(1) : '';
 }
 
 function canonicalFuel(text: string, fuel?: string): string {
@@ -118,6 +144,40 @@ function canonicalTransmission(text: string, transmission?: string): string {
   return transmission ?? 'Unknown';
 }
 
+function buildDerivative(text: string, engineLitres?: number, fuel?: string): string {
+  const capacity = extractEngineCapacity(text, engineLitres);
+  const badge = extractEngineBadge(text, engineLitres);
+  const normalizedFuel = canonicalFuel(text, fuel);
+  const normalizedBadge =
+    badge && badge !== capacity
+      ? badge
+      : normalizedFuel !== 'Unknown'
+        ? normalizedFuel
+        : '';
+
+  if (capacity && normalizedBadge) {
+    return `${capacity} ${normalizedBadge}`;
+  }
+  if (normalizedBadge) {
+    return normalizedBadge;
+  }
+  if (capacity) {
+    return capacity;
+  }
+  return '';
+}
+
+function mergeSearchTokens(...tokenGroups: string[][]): string[] {
+  return Array.from(
+    new Set(
+      tokenGroups
+        .flat()
+        .flatMap((token) => tokenize(token))
+        .filter(Boolean),
+    ),
+  );
+}
+
 export function buildNormalizedVehicleSpec(input: {
   make: string;
   model: string;
@@ -131,6 +191,11 @@ export function buildNormalizedVehicleSpec(input: {
   const combined = normalizeText(
     `${input.make} ${input.model} ${input.variant ?? ''} ${input.title ?? ''} ${input.fuel ?? ''} ${input.transmission ?? ''}`,
   );
+  const derivative = buildDerivative(combined, input.engineLitres, input.fuel);
+  const engineBadge = extractEngineBadge(combined, input.engineLitres);
+  const trim = extractTrim(combined);
+  const fuelType = canonicalFuel(combined, input.fuel);
+  const normalizedTransmission = canonicalTransmission(combined, input.transmission);
 
   const searchTokens = tokenize(
     input.make,
@@ -140,18 +205,44 @@ export function buildNormalizedVehicleSpec(input: {
     input.fuel,
     input.transmission,
     input.year,
-    extractTrim(combined),
-    extractEngineBadge(combined, input.engineLitres),
+    trim,
+    engineBadge,
+    derivative,
+    fuelType,
+    normalizedTransmission,
   );
 
   return {
     normalizedMake: titleCase(normalizeText(input.make)),
     normalizedModel: titleCase(normalizeText(input.model)),
-    trim: extractTrim(combined),
-    engineBadge: extractEngineBadge(combined, input.engineLitres),
-    fuelType: canonicalFuel(combined, input.fuel),
-    transmission: canonicalTransmission(combined, input.transmission),
+    derivative,
+    trim,
+    engineBadge,
+    fuelType,
+    transmission: normalizedTransmission,
     searchTokens,
+  };
+}
+
+export function hydrateNormalizedVehicleSpec(
+  existing: Partial<NormalizedVehicleSpec> | null | undefined,
+  input: Parameters<typeof buildNormalizedVehicleSpec>[0],
+): NormalizedVehicleSpec {
+  const built = buildNormalizedVehicleSpec(input);
+
+  if (!existing) {
+    return built;
+  }
+
+  return {
+    normalizedMake: existing.normalizedMake || built.normalizedMake,
+    normalizedModel: existing.normalizedModel || built.normalizedModel,
+    derivative: existing.derivative || built.derivative,
+    trim: existing.trim || built.trim,
+    engineBadge: existing.engineBadge || built.engineBadge,
+    fuelType: existing.fuelType || built.fuelType,
+    transmission: existing.transmission || built.transmission,
+    searchTokens: mergeSearchTokens(existing.searchTokens ?? [], built.searchTokens),
   };
 }
 
@@ -159,8 +250,7 @@ export function normalizeVehicle(vehicle: Vehicle): Vehicle {
   return {
     ...vehicle,
     normalizedSpec:
-      vehicle.normalizedSpec ??
-      buildNormalizedVehicleSpec({
+      hydrateNormalizedVehicleSpec(vehicle.normalizedSpec, {
         make: vehicle.make,
         model: vehicle.model,
         variant: vehicle.variant,
@@ -176,8 +266,7 @@ export function normalizeComparable(listing: ComparableListing): ComparableListi
   return {
     ...listing,
     normalizedSpec:
-      listing.normalizedSpec ??
-      buildNormalizedVehicleSpec({
+      hydrateNormalizedVehicleSpec(listing.normalizedSpec, {
         make: listing.make,
         model: listing.model,
         variant: listing.variant,

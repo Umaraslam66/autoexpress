@@ -30,7 +30,7 @@ import type {
   SourceName as SourceNameDto,
   Vehicle as VehicleDto,
 } from '../../../src/types.js';
-import { buildNormalizedVehicleSpec } from '../../../src/utils/normalization.js';
+import { hydrateNormalizedVehicleSpec } from '../../../src/utils/normalization.js';
 
 function mapRole(role: UserRole): AppUser['role'] {
   return role === UserRole.ADMIN ? 'admin' : 'pricing_manager';
@@ -151,8 +151,7 @@ export function toVehicleDto(vehicle: Vehicle & { snapshots?: VehicleSnapshot[] 
     vehicleUrl: vehicle.vehicleUrl,
     imageUrl: vehicle.imageUrl,
     normalizedSpec:
-      (vehicle.normalizedSpecJson as VehicleDto['normalizedSpec'] | null) ??
-      buildNormalizedVehicleSpec({
+      hydrateNormalizedVehicleSpec(vehicle.normalizedSpecJson as VehicleDto['normalizedSpec'] | null, {
         make: vehicle.make,
         model: vehicle.model,
         variant: vehicle.variant,
@@ -206,8 +205,7 @@ export function toComparableListingDto(
     daysListed: listing.daysListed,
     imageUrl: listing.imageUrl ?? undefined,
     normalizedSpec:
-      (listing.normalizedSpecJson as ComparableListing['normalizedSpec'] | null) ??
-      buildNormalizedVehicleSpec({
+      hydrateNormalizedVehicleSpec(listing.normalizedSpecJson as ComparableListing['normalizedSpec'] | null, {
         make: listing.make,
         model: listing.model,
         variant: listing.variant,

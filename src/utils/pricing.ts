@@ -54,14 +54,11 @@ export function computePricing(
       !manuallyExcluded.has(listing.id) &&
       (listing.confidence === 'high' || listing.confidence === 'medium'),
   );
-
-  const baseMedian = median(eligible.map((listing) => listing.price));
   const excludedByYear = eligible.filter((listing) => listing.year !== vehicle.year);
+  const sameYearEligible = eligible.filter((listing) => listing.year === vehicle.year);
+  const baseMedian = median(sameYearEligible.map((listing) => listing.price));
 
-  const filtered = eligible.filter((listing) => {
-    if (listing.year !== vehicle.year) {
-      return false;
-    }
+  const filtered = sameYearEligible.filter((listing) => {
     if (!baseMedian) {
       return true;
     }
@@ -91,9 +88,7 @@ export function computePricing(
       .filter((listing) => Math.abs(listing.mileageKm - vehicle.mileageKm) <= 15000)
       .map((listing) => listing.price),
   );
-  const similarYearMedian = median(
-    filtered.filter((listing) => Math.abs(listing.year - vehicle.year) <= 1).map((listing) => listing.price),
-  );
+  const similarYearMedian = median(filtered.map((listing) => listing.price));
   const suggestedTarget = median(weightedAdjusted);
   const suggestedFloor =
     suggestedTarget === null ? null : Math.round(clamp(suggestedTarget - 750, 0, Number.MAX_SAFE_INTEGER));

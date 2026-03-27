@@ -100,6 +100,43 @@ export async function resetVehicleStockTurn(
   return { vehicleId, stockClockStartAt: now.toISOString() };
 }
 
+export async function setVehicleStockTurnDate(
+  dealershipId: string,
+  vehicleId: string,
+  stockClockStartAt: string,
+  tx: Prisma.TransactionClient | typeof prisma = prisma,
+) {
+  const vehicle = await tx.vehicle.findFirst({
+    where: { id: vehicleId, dealershipId },
+  });
+
+  if (!vehicle) {
+    throw new HttpError(404, 'Vehicle not found.');
+  }
+
+  const parsedDate = new Date(stockClockStartAt);
+  if (Number.isNaN(parsedDate.getTime())) {
+    throw new HttpError(400, 'A valid stock turn date is required.');
+  }
+
+  if (parsedDate.getTime() > Date.now()) {
+    throw new HttpError(400, 'Stock turn date cannot be in the future.');
+  }
+
+  if (parsedDate.getTime() < vehicle.dateAdded.getTime()) {
+    throw new HttpError(400, 'Stock turn date cannot be earlier than the vehicle date added.');
+  }
+
+  await tx.vehicle.update({
+    where: { id: vehicleId },
+    data: {
+      stockClockStartAt: parsedDate,
+    },
+  });
+
+  return { vehicleId, stockClockStartAt: parsedDate.toISOString() };
+}
+
 export async function createPricingDecision(
   dealershipId: string,
   userId: string,

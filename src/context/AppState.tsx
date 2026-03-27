@@ -24,6 +24,7 @@ import type {
   PricingDecision,
   PricingDecisionCreateInput,
   PricingFileRecord,
+  StockTurnUpdateInput,
   SourceHealth,
   Vehicle,
 } from '../types';
@@ -62,6 +63,7 @@ interface AppStateValue {
   runAdminRefresh: (source: 'all' | 'autoxpress' | 'carzone' | 'carsireland' | 'donedeal') => Promise<void>;
   runAdminBackfill: () => Promise<void>;
   resetStockTurn: (vehicleId: string) => Promise<void>;
+  setStockTurnDate: (vehicleId: string, input: StockTurnUpdateInput) => Promise<void>;
 }
 
 const EMPTY_BOOTSTRAP: ApiBootstrapData = {
@@ -393,6 +395,17 @@ export function AppStateProvider({ children }: PropsWithChildren) {
         }
         await fetchJson(`/api/vehicles/${vehicleId}/stock-turn/reset`, {
           method: 'POST',
+        });
+        await refresh();
+      },
+      setStockTurnDate: async (vehicleId, input) => {
+        if (dataState.meta.mode === 'seed') {
+          setSyncError('Demo mode is read-only. Stock turn updates are disabled in this environment.');
+          return;
+        }
+        await fetchJson(`/api/vehicles/${vehicleId}/stock-turn`, {
+          method: 'POST',
+          body: JSON.stringify(input),
         });
         await refresh();
       },

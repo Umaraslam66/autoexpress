@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, Navigate, useParams } from 'react-router-dom';
 import { AppShell } from '../components/layout/AppShell';
 import { Badge } from '../components/ui/Badge';
@@ -12,44 +12,56 @@ export function VehicleDetailPage() {
   const { vehicleId } = useParams();
   const state = useAppState();
   const vehicle = state.vehicles.find((candidate) => candidate.id === vehicleId);
+  const currentVehicle = vehicle ?? null;
   const [draftPrice, setDraftPrice] = useState<number | ''>('');
   const [draftNote, setDraftNote] = useState('');
   const isDemoMode = state.dataMode === 'seed';
+  const currentSpec = currentVehicle?.normalizedSpec;
 
-  if (!vehicle) {
-    return <Navigate to="/inventory" replace />;
-  }
+  const comparables = currentVehicle
+    ? state.comparableListings.filter((listing) => listing.vehicleId === currentVehicle.id)
+    : [];
+  const excludedIds = currentVehicle ? state.excludedComparables[currentVehicle.id] ?? [] : [];
+  const decision = currentVehicle ? state.pricingDecisions[currentVehicle.id] : undefined;
+  const pricing = currentVehicle ? computePricing(currentVehicle, comparables, excludedIds, decision) : null;
+  const sameYearComparables = pricing?.includedComparables ?? [];
+  const excludedByYearCount = currentVehicle
+    ? comparables.filter(
+        (listing) =>
+          !excludedIds.includes(listing.id) &&
+          (listing.confidence === 'high' || listing.confidence === 'medium') &&
+          listing.year !== currentVehicle.year,
+      ).length
+    : 0;
 
-  const currentVehicle = vehicle;
-
-  const comparables = state.comparableListings.filter((listing) => listing.vehicleId === currentVehicle.id);
-  const excludedIds = state.excludedComparables[currentVehicle.id] ?? [];
-  const decision = state.pricingDecisions[currentVehicle.id];
-  const pricing = computePricing(currentVehicle, comparables, excludedIds, decision);
-  const sameYearComparables = pricing.includedComparables;
-  const excludedByYearCount = comparables.filter(
-    (listing) =>
-      !excludedIds.includes(listing.id) &&
-      (listing.confidence === 'high' || listing.confidence === 'medium') &&
-      listing.year !== currentVehicle.year,
-  ).length;
-
+  const currentVehicleIndex = currentVehicle
+    ? state.vehicles.findIndex((candidate) => candidate.id === currentVehicle.id)
+    : -1;
   const previousVehicle =
-    state.vehicles[Math.max(0, state.vehicles.findIndex((candidate) => candidate.id === currentVehicle.id) - 1)];
+    currentVehicleIndex >= 0
+      ? state.vehicles[Math.max(0, currentVehicleIndex - 1)]
+      : null;
   const nextVehicle =
-    state.vehicles[
-      Math.min(state.vehicles.length - 1, state.vehicles.findIndex((candidate) => candidate.id === currentVehicle.id) + 1)
-    ];
+    currentVehicleIndex >= 0
+      ? state.vehicles[Math.min(state.vehicles.length - 1, currentVehicleIndex + 1)]
+      : null;
 
   const mapSummary = useMemo(() => {
-    const locations = Array.from(new Set(pricing.includedComparables.map((listing) => listing.dealerLocation)));
+    const locations = Array.from(new Set(sameYearComparables.map((listing) => listing.dealerLocation)));
     return locations.join(', ');
-  }, [pricing.includedComparables]);
+  }, [sameYearComparables]);
 
-  const recentPricingFile = state.pricingFiles.find((record) => record.vehicleId === currentVehicle.id);
+  const recentPricingFile = currentVehicle
+    ? state.pricingFiles.find((record) => record.vehicleId === currentVehicle.id)
+    : null;
+  const [stockTurnDate, setStockTurnDate] = useState(currentVehicle ? (currentVehicle.stockClockStartAt ?? currentVehicle.dateAdded).slice(0, 10) : '');
+
+  useEffect(() => {
+    setStockTurnDate(currentVehicle ? (currentVehicle.stockClockStartAt ?? currentVehicle.dateAdded).slice(0, 10) : '');
+  }, [currentVehicle]);
 
   async function handleAcceptRecommendation() {
-    if (!pricing.suggestedTarget) {
+    if (!currentVehicle || !pricing?.suggestedTarget) {
       return;
     }
     await state.savePricingDecision(currentVehicle.id, {
@@ -61,7 +73,7 @@ export function VehicleDetailPage() {
   }
 
   async function handleSaveManualDecision() {
-    if (draftPrice === '' || Number.isNaN(draftPrice)) {
+    if (!currentVehicle || draftPrice === '' || Number.isNaN(draftPrice)) {
       return;
     }
     await state.savePricingDecision(currentVehicle.id, {
@@ -72,11 +84,28 @@ export function VehicleDetailPage() {
   }
 
   async function handleGeneratePricingFile() {
+    if (!currentVehicle || !pricing) {
+      return;
+    }
     const record = await state.createPricingFile(currentVehicle.id);
     if (!record) {
       return;
     }
     exportPricingFileCsv(currentVehicle, pricing.includedComparables, state.pricingDecisions[currentVehicle.id], record);
+  }
+
+  async function handleSaveStockTurnDate() {
+    if (!currentVehicle || !stockTurnDate) {
+      return;
+    }
+
+    await state.setStockTurnDate(currentVehicle.id, {
+      stockClockStartAt: `${stockTurnDate}T12:00:00.000Z`,
+    });
+  }
+
+  if (!currentVehicle || !pricing) {
+    return <Navigate to="/inventory" replace />;
   }
 
   return (
@@ -276,6 +305,50 @@ export function VehicleDetailPage() {
               <div>
                 <span>Latest pricing file</span>
                 <strong>{recentPricingFile ? formatDateTime(recentPricingFile.createdAt) : 'Not generated yet'}</strong>
+              </div>
+              <div className="detail-panel">
+                <span>Normalized spec</span>
+                <strong>{currentSpec?.derivative || 'Derivative pending'}</strong>
+                <p>
+                  {[
+                    currentSpec?.normalizedMake,
+                    currentSpec?.normalizedModel,
+                    currentSpec?.trim || 'No trim',
+                    currentSpec?.fuelType || currentVehicle.fuel,
+                    currentSpec?.transmission || currentVehicle.transmission,
+                  ].filter(Boolean).join(' • ')}
+                </p>
+              </div>
+              <div className="detail-panel">
+                <span>Stock turn clock</span>
+                <strong>{formatDate(currentVehicle.stockClockStartAt ?? currentVehicle.dateAdded)}</strong>
+                <p>Set the live stock-turn start date if the imported start date is wrong.</p>
+                <input
+                  type="date"
+                  value={stockTurnDate}
+                  onChange={(event) => setStockTurnDate(event.target.value)}
+                  disabled={isDemoMode}
+                />
+                <div className="stack-actions">
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={() => void handleSaveStockTurnDate()}
+                    disabled={isDemoMode || !stockTurnDate}
+                  >
+                    Save stock turn date
+                  </button>
+                  <button
+                    type="button"
+                    className="ghost-button"
+                    onClick={() => {
+                      void state.resetStockTurn(currentVehicle.id);
+                    }}
+                    disabled={isDemoMode}
+                  >
+                    Reset to today
+                  </button>
+                </div>
               </div>
 
               <div className="reason-list">

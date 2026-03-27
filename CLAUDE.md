@@ -74,6 +74,7 @@ Vehicles and comparables use normalized specs:
 
 - `normalizedMake`
 - `normalizedModel`
+- `derivative`
 - `trim`
 - `engineBadge`
 - `fuelType`
@@ -89,7 +90,7 @@ Stock turn relies on:
 - `stockClockStartAt`
 - `lastPriceChangeAt`
 
-Resetting stock turn is the supported workflow when a vehicle physically arrives. Do not create a duplicate vehicle record just to restart stock age.
+Resetting stock turn is the supported workflow when a vehicle physically arrives. Operators can also set the stock-turn start date manually when the imported date is wrong. Do not create a duplicate vehicle record just to restart stock age.
 
 ## Source Support
 
@@ -309,6 +310,7 @@ Vehicles:
 - `GET /api/vehicles/:id/pricing`
 - `POST /api/vehicles/:id/decision`
 - `POST /api/vehicles/:id/exclusions`
+- `POST /api/vehicles/:id/stock-turn`
 - `POST /api/vehicles/:id/stock-turn/reset`
 
 Pricing files:
@@ -374,4 +376,3 @@ The repo currently does not rely on a mature migration history in the same way a
 - `npm run db:push`
 - `npm run db:migrate`
 - `npm run db:seed`
-
